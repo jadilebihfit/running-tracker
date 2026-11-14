@@ -547,11 +547,13 @@ async function syncNow(){const sb=sbInit();if(!sb||!SB_USER||SB_BUSY)return;SB_B
     // 3. profil, progres program, milestone
     const {data:st,error:e1}=await sb.from('lk_state').select('*').eq('user_id',uid).maybeSingle();if(e1)throw e1;
     const firstLink=LS.get('lk-sync-linked',null)!==uid;
-    if(st){if(st.profile&&(firstLink||(+st.profile_u||0)>(P._u||0))){P=Object.assign({},st.profile,{onboarded:true,_u:+st.profile_u||Date.now()});LS.set('lk-profile',P);PLAN_SIG='';changed=true}
-      for(const k in (st.done||{})){DONE[k]=Object.assign({},st.done[k],DONE[k]||{})}
+    const rs=st&&st.done&&st.done.__reset||0;
+    if(rs>LS.get('lk-reset-seen',0)){LS.set('lk-reset-seen',rs);if(!firstLink){RUNS=[];DONE={};EARNED={};['lk-runs','lk-done','lk-earned','lk-tomb','lk-earned-init'].forEach(LS.del);LS.del('lk-profile');P=null;PLAN_SIG='';LS.set('lk-sync-linked',uid);SB_LAST=new Date().toISOString();LS.set('lk-sync-last',SB_LAST);route();toast('Data akun ini sudah di-reset dari perangkat lain.');return}}
+    if(st){if(st.profile&&(firstLink||!P||(+st.profile_u||0)>(P._u||0))){P=Object.assign({},st.profile,{onboarded:true,_u:+st.profile_u||Date.now()});LS.set('lk-profile',P);PLAN_SIG='';changed=true}
+      for(const k in (st.done||{})){if(k==='__reset')continue;DONE[k]=Object.assign({},st.done[k],DONE[k]||{})}
       for(const k in (st.earned||{})){if(!EARNED[k]||st.earned[k]<EARNED[k])EARNED[k]=st.earned[k]}
       LS.set('lk-done',DONE);LS.set('lk-earned',EARNED)}
-    const {error:e2}=await sb.from('lk_state').upsert({user_id:uid,profile:P,profile_u:P._u||Date.now(),done:DONE,earned:EARNED,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(e2)throw e2;
+    if(P){const {error:e2}=await sb.from('lk_state').upsert({user_id:uid,profile:P,profile_u:P._u||Date.now(),done:rs?Object.assign({},DONE,{__reset:rs}):DONE,earned:EARNED,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(e2)throw e2}
     LS.set('lk-sync-linked',uid);SB_LAST=new Date().toISOString();LS.set('lk-sync-last',SB_LAST);
     if(changed||pulled){PLAN_SIG='';route()}
   }catch(e){SB_ERR=(e&&e.message)||'Sinkron gagal.';if(/fetch|network/i.test(SB_ERR))SB_ERR='Tidak bisa terhubung ke server. Cek koneksi internet atau Project URL.';if(/relation .* does not exist|lk_runs|lk_state/.test(SB_ERR))SB_ERR='Tabel belum dibuat. Jalankan supabase/schema.sql di SQL Editor Supabase.'}
@@ -902,15 +904,34 @@ function rProfil(){const v=$('#v-profil');
   <div class="card stack"><h3>Saat merekam</h3>
     <label class="feat" for="pf-sound"><input type="checkbox" id="pf-sound" ${PREF.sound?'checked':''}><span><b>Bunyi dan suara</b><span class="small muted">Bip, getar, dan suara berbahasa Indonesia.</span></span></label>
     <label class="feat" for="pf-auto"><input type="checkbox" id="pf-auto" ${PREF.autoPause?'checked':''}><span><b>Jeda otomatis</b><span class="small muted">Waktu berhenti dihitung saat kamu diam lebih dari 12 detik (misalnya lampu merah).</span></span></label></div>
-  <div class="card stack"><h3>Hapus semua data</h3><p class="small muted">Menghapus profil, catatan lari, dan pencapaian dari browser ini. Simpan cadangan dulu di halaman Riwayat.</p>
-    <div class="row"><button class="btn sm" type="button" id="pf-wipe">Hapus semua data</button><span id="pf-wc" hidden class="small">Tidak bisa dibatalkan. <button class="btn sm hot" type="button" id="pf-wipe2">Ya, hapus semua</button> <button class="btn sm" type="button" id="pf-wk">Batal</button></span></div></div>`}
+  <div class="card stack"><h3>Reset data</h3><p class="small muted">Simpan cadangan dulu di halaman Riwayat kalau ragu. Semua reset tidak bisa dibatalkan.</p>
+    <div>
+      <div class="feat" style="grid-template-columns:1fr auto;align-items:center"><span><b>Ulang program dari minggu 1</b><span class="small muted">Progres sesi dihapus dan program mulai lagi minggu depan. Catatan lari dan pencapaian tetap.</span></span><button class="btn sm" type="button" data-reset="prog">Ulang</button></div>
+      <div class="feat" style="grid-template-columns:1fr auto;align-items:center"><span><b>Hapus data di perangkat ini</b><span class="small muted">Profil, lari, dan pencapaian dihapus dari ${NATIVE?'aplikasi':'browser'} ini${SB_USER?' dan kamu keluar dari akun. Data di akun tetap aman, masuk lagi untuk mengembalikannya':''}.</span></span><button class="btn sm" type="button" data-reset="device">Hapus</button></div>
+      ${SB_USER?`<div class="feat" style="grid-template-columns:1fr auto;align-items:center"><span><b>Hapus semua, termasuk di akun</b><span class="small muted">Menghapus data di server sehingga hilang dari aplikasi <i>dan</i> website. Akun login tetap ada.</span></span><button class="btn sm hot" type="button" data-reset="all">Hapus semua</button></div>`:''}
+    </div>
+    <p class="small" id="rs-conf" hidden></p></div>`}
 function lvlCard(k,L,on){return `<button class="lvl" type="button" data-lvl="${k}" aria-pressed="${on}"><span class="ln"><i>${LVN[k]}</i>${L.name}</span><span class="tg">${L.tag}</span><ul>${L.bullets.map(b=>`<li>${b}</li>`).join('')}</ul></button>`}
 function setLevel(k){if(P.level===k)return;setTimeout(updHead);const L=LEVELS[k];P.level=k;P.features=[...L.feats];if(!L.goals.some(g=>g[0]===P.goal))P.goal=L.goals[Math.min(1,L.goals.length-1)][0];if(!L.days.includes(+P.days))P.days=L.days[0];
   if(k!=='pemula'&&!P.raceTime){P.raceDist=k==='pro'?'10':'5';P.raceTime=k==='pro'?46*60:29*60}saveP();PLAN_SIG='';toast(`Level diganti ke ${L.name}. Program dan fitur disesuaikan.`)}
 document.addEventListener('click',e=>{const l=e.target.closest('#pf-lvl [data-lvl]');if(l){setLevel(l.dataset.lvl);rProfil();return}
   const id=e.target.id;if(id==='pf-reset'){P.features=[...LEVELS[P.level].feats];saveP();rProfil();toast('Fitur dikembalikan ke bawaan')}
-  else if(id==='pf-wipe')$('#pf-wc').hidden=false;else if(id==='pf-wk')$('#pf-wc').hidden=true;
-  else if(id==='pf-wipe2'){['lk-profile','lk-runs','lk-done','lk-earned','lk-pref','lk-earned-init','la-log','la-cfg','la-done'].forEach(LS.del);P=null;RUNS=[];DONE={};EARNED={};location.hash='';route()}});
+});
+const RESET_TXT={prog:'Program diulang dari minggu 1 mulai Senin depan.',device:'Semua data di perangkat ini akan dihapus.',all:'Semua data di akun dan di semua perangkat akan dihapus permanen.'};
+function wipeLocal(){['lk-profile','lk-runs','lk-done','lk-earned','lk-pref','lk-earned-init','lk-tomb','lk-pull-cursor','lk-pushed-at','lk-sync-linked','lk-sync-last','lk-state-u','la-log','la-cfg','la-done'].forEach(LS.del);P=null;RUNS=[];DONE={};EARNED={};PLAN_SIG='';OB={step:0,d:null};location.hash='';route()}
+document.addEventListener('click',async e=>{const r=e.target.closest('[data-reset]');if(r){const c=$('#rs-conf');c.hidden=false;c.innerHTML=`${RESET_TXT[r.dataset.reset]} <button class="btn sm hot" type="button" id="rs-yes" data-act="${r.dataset.reset}">Ya, lanjutkan</button> <button class="btn sm" type="button" id="rs-no">Batal</button>`;return}
+  if(e.target.id==='rs-no'){$('#rs-conf').hidden=true;return}
+  if(e.target.id!=='rs-yes')return;const act=e.target.dataset.act;e.target.disabled=true;
+  if(act==='prog'){const t=new Date(),m=monday(t);P.planStart=iso(addDays(m,7));saveP();PLAN_SIG='';toast(`Program diulang. Minggu 1 mulai ${dShort(pd(P.planStart))}.`);rProfil();return}
+  if(act==='device'){if(SB&&SB_USER){try{await SB.auth.signOut()}catch(err){}SB_USER=null}wipeLocal();toast('Data di perangkat ini dihapus.');return}
+  if(act==='all'){const sb=sbInit();if(!sb||!SB_USER){toast('Masuk ke akun dulu.');return}
+    try{const uid=SB_USER.id,now=Date.now(),ts=new Date(now).toISOString();
+      const {data:ids,error:e0}=await sb.from('lk_runs').select('id').eq('user_id',uid).eq('deleted',false);if(e0)throw e0;
+      const all=[...new Set([...(ids||[]).map(x=>x.id),...RUNS.map(r=>r.id)])];
+      for(let i=0;i<all.length;i+=100){const {error}=await sb.from('lk_runs').upsert(all.slice(i,i+100).map(id=>({user_id:uid,id,data:null,deleted:true,updated_at:ts})),{onConflict:'user_id,id'});if(error)throw error}
+      const b=await sb.from('lk_state').upsert({user_id:uid,profile:null,profile_u:now,done:{__reset:now},earned:{},updated_at:ts},{onConflict:'user_id'});if(b.error)throw b.error;LS.set('lk-reset-seen',now);
+      await sb.auth.signOut();SB_USER=null;wipeLocal();toast('Semua data di akun dan perangkat ini sudah dihapus.')}
+    catch(err){e.target.disabled=false;toast('Gagal menghapus data di server: '+((err&&err.message)||err)+'. Data di perangkat belum diubah.')}}});
 document.addEventListener('change',e=>{const t=e.target,id=t.id;
   if(t.dataset.feat){const f=t.dataset.feat;P.features=t.checked?[...new Set([...P.features,f])]:P.features.filter(x=>x!==f);saveP();return}
   if(id==='pf-sound'){PREF.sound=t.checked;LS.set('lk-pref',PREF)}else if(id==='pf-auto'){PREF.autoPause=t.checked;LS.set('lk-pref',PREF)}
