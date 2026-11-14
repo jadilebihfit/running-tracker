@@ -2,6 +2,38 @@
 
 Aplikasi lari berbasis web untuk pelari pemula, menengah, dan pro. Tanpa server, tanpa database, tanpa API berbayar. Semua data disimpan di browser HP pengguna (`localStorage`).
 
+## Aplikasi Android + sinkron
+
+Langkah tersedia sebagai **website** dan **aplikasi Android** (Capacitor). Data keduanya tersambung lewat akun Supabase.
+
+### 1. Siapkan Supabase (sekali saja, gratis)
+1. Buat proyek di https://supabase.com → New project.
+2. Buka **SQL Editor → New query**, tempel isi `supabase/schema.sql`, lalu **Run**.
+3. Buka **Project Settings → API**, salin **Project URL** dan **anon public key** ke `src/config.js`, lalu push. (Atau isi langsung di aplikasi: Profil → Akun & sinkron.)
+4. Opsional: **Authentication → Sign In / Providers → Email**, matikan *Confirm email* supaya pendaftaran tidak perlu klik email.
+
+Anon key memang aman berada di kode aplikasi; setiap pengguna hanya bisa membaca dan menulis datanya sendiri karena Row Level Security di `schema.sql`.
+
+### 2. Dapatkan APK
+Setiap push ke `main` menjalankan GitHub Actions (`.github/workflows/android.yml`) yang membuat APK dan menaruhnya di halaman **Releases**:
+https://github.com/jadilebihfit/running-tracker/releases/latest
+
+Unduh dari HP Android, buka file-nya, izinkan "Instal dari sumber tidak dikenal" kalau diminta.
+
+Build sendiri (butuh Android Studio + JDK 21):
+```bash
+npm install
+npm run android:sync
+npm run android:open
+```
+
+### Cara sinkron bekerja
+- Data selalu disimpan dulu di HP (bisa offline), lalu dikirim ke Supabase saat online.
+- Sinkron otomatis saat aplikasi dibuka, saat kembali ke aplikasi, dan setelah ada perubahan.
+- Lari: versi yang paling baru diubah yang menang. Lari yang dihapus ikut terhapus di perangkat lain.
+- Profil: versi terbaru menang. Saat pertama kali masuk di perangkat baru, profil dari akun yang dipakai.
+- Progres program dan milestone digabung dari semua perangkat.
+
 ## Struktur
 
 ```
@@ -9,8 +41,12 @@ src/
   index.html        markup semua halaman
   styles.css        tema gelap + komponen (token warna di :root)
   app.js            seluruh logika aplikasi
-  vendor/leaflet.css  stylesheet peta Leaflet 1.9.4
-build.py            gabungkan src/ jadi satu file
+  config.js         URL + anon key Supabase
+  vendor/           Leaflet 1.9.4 (peta) dan supabase-js 2.118 (sinkron)
+supabase/schema.sql tabel + Row Level Security untuk sinkron
+android/            proyek Android (Capacitor 7)
+capacitor.config.json, package.json
+build.py            gabungkan src/ jadi satu file (index.html, dist/, www/)
 dist/               hasil build (index.html + artifact.html)
 ```
 
@@ -51,9 +87,11 @@ python3 build.py
 | `fisiologi` | VDOT (Daniels), pace latihan, prediksi lomba |
 | `program` | `planPemula()` lari-jalan, `planStructured()` 10K/HM/FM |
 | `milestone` | daftar `MS` + `checkMilestones()` |
+| `native` | deteksi Capacitor, akses plugin native |
 | `perekam` | GPS live: filter akurasi (>35 m dibuang), anti-goyang (<3 m), anti-loncat (>11 m/s), elevasi, split, jeda otomatis, mode simulasi |
 | `analisis track` | best effort 1K–FM, split, impor GPX |
 | `story IG` | `drawStory()` kartu kaca 1080×1920, background foto/transparan/gelap/lime |
+| `akun & sinkron` | login Supabase, `syncNow()` tarik/kirim lari, profil, progres |
 | `peta` | Leaflet + tile CARTO dark, fallback ke canvas |
 | `Beranda`, `Program`, `Riwayat`, `Alat`, `Pencapaian`, `Profil`, `Onboarding` | render tiap halaman |
 
@@ -61,5 +99,5 @@ python3 build.py
 
 - **Font**: teks memakai font sistem dulu (`-apple-system`), jadi di iPhone/Mac tampil sebagai SF Pro; di perangkat lain memakai Inter dari Google Fonts. File SF Pro sengaja tidak disimpan di repo ini karena lisensi Apple tidak mengizinkan disebarkan. Angka memakai Roboto Mono.
 - **Peta**: tile dari CARTO (berbasis OpenStreetMap), gratis untuk pemakaian ringan dengan atribusi. Untuk banyak pengguna, cek ketentuan CARTO.
-- **Keterbatasan GPS web**: browser berhenti membaca GPS saat layar terkunci. Aplikasi menjaga layar tetap menyala (Wake Lock). Ada bug yang diketahui: dengan jeda otomatis aktif, waktu selama layar mati tidak dihitung sehingga pace terlihat lebih cepat (lihat fungsi `tick()` di `app.js`).
+- **GPS**: di aplikasi Android, GPS tetap merekam saat layar mati (foreground service + notifikasi). Di website, browser berhenti membaca GPS saat layar terkunci; waktu yang terlewat tetap dihitung kalau kamu terus bergerak, tapi rute di bagian itu jadi garis lurus.
 - Rumus detak jantung: Tanaka + Karvonen. Kalori: berat × km × 1,036 (perkiraan).

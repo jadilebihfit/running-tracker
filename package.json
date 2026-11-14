@@ -1,0 +1,23 @@
+{
+  "name": "running-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Langkah: aplikasi lari (web + Android)",
+  "scripts": {
+    "build": "python3 build.py",
+    "android:sync": "python3 build.py && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:apk": "python3 build.py && npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "1.2.26",
+    "@capacitor/android": "7.6.10",
+    "@capacitor/app": "7.1.2",
+    "@capacitor/core": "7.6.10",
+    "@capacitor/filesystem": "7.1.9",
+    "@capacitor/share": "7.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "7.6.10"
+  }
+}

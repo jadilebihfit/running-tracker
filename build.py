@@ -4,6 +4,7 @@
 
 Hasil:
   dist/index.html     -> untuk di-hosting (Netlify Drop, GitHub Pages). GPS + peta aktif.
+  www/index.html     -> untuk aplikasi Android (Capacitor).
   index.html         -> salinan dist/index.html di root, untuk GitHub Pages.
   dist/artifact.html  -> versi tanpa <!doctype>/<head>, untuk dipublish sebagai artifact claude.ai.
 """
@@ -36,6 +37,8 @@ def main():
 
     html = html.replace('<link rel="stylesheet" href="vendor/leaflet.css">\n', "")
     html = html.replace('<link rel="stylesheet" href="styles.css">', f"<style>\n{leaflet}\n{css}</style>")
+    for src_path in ["vendor/leaflet.js", "vendor/supabase.js", "config.js"]:
+        html = html.replace(f'<script src="{src_path}"></script>', "<script>\n" + read(src_path) + "\n</script>")
     html = html.replace('<script src="app.js"></script>', f"<script>\n{js}</script>")
 
     os.makedirs(DIST, exist_ok=True)
@@ -48,6 +51,11 @@ def main():
     keep = "".join(re.findall(r"<title>.*?</title>\n?|<meta name=\"claude:[^>]*>\n?|<link[^>]*>\n?|<style>.*?</style>\n?", head, re.S))
     with open(os.path.join(DIST, "artifact.html"), "w", encoding="utf-8") as f:
         f.write(keep + body.strip() + "\n")
+
+    # folder web untuk aplikasi Android (Capacitor)
+    os.makedirs(os.path.join(ROOT, "www"), exist_ok=True)
+    with open(os.path.join(ROOT, "www", "index.html"), "w", encoding="utf-8") as f:
+        f.write(html)
 
     # salinan di root repo supaya GitHub Pages (deploy from branch, root) langsung menampilkan aplikasi
     with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8") as f:

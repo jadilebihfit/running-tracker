@@ -68,7 +68,7 @@ function defaultProfile(level){const L=LEVELS[level];return {name:'',level,age:2
   raceDist:level==='pro'?'10':'5',raceTime:level==='menengah'?29*60:level==='pro'?46*60:null,
   planStart:defaultStart(),features:[...L.feats],onboarded:false}}
 function defaultStart(){const t=new Date();const m=monday(t);return iso(dowOf(t)>=3?addDays(m,7):m)}
-const saveP=()=>LS.set('lk-profile',P);
+const saveP=()=>{P._u=Date.now();LS.set('lk-profile',P);syncSoon()};
 function saveRuns(){if(LS.set('lk-runs',RUNS))return true;
   // penuh: buang rute dari lari terlama sampai muat
   const sorted=RUNS.filter(r=>r.track).sort((a,b)=>a.date.localeCompare(b.date));
@@ -173,7 +173,7 @@ MS.push({id:'early-1',big:'05',unit:'PAGI',title:'Pelari subuh',sub:'Lari sebelu
 MS.push({id:'plan-1',big:'1',unit:'MINGGU',title:'Minggu program pertama tuntas',sub:'Semua sesi minggu pertama selesai.',val:s=>s.planWeeks,goal:1,tier:0});
 MS.push({id:'plan-done',big:'100',unit:'PERSEN',title:'Program selesai',sub:'Semua minggu programmu tuntas.',val:s=>s.planWeeks/Math.max(1,s.planTotal),goal:1,tier:3});
 const msSub=m=>typeof m.sub==='function'?m.sub():m.sub;
-function checkMilestones(){const s=stats(),fresh=[];MS.forEach(m=>{if(!EARNED[m.id]&&m.val(s)>=m.goal){EARNED[m.id]=new Date().toISOString();fresh.push({kind:'ms',m,date:EARNED[m.id]})}});if(fresh.length)LS.set('lk-earned',EARNED);return fresh}
+function checkMilestones(){const s=stats(),fresh=[];MS.forEach(m=>{if(!EARNED[m.id]&&m.val(s)>=m.goal){EARNED[m.id]=new Date().toISOString();fresh.push({kind:'ms',m,date:EARNED[m.id]})}});if(fresh.length)saveEarned();return fresh}
 // tandai milestone yang sudah tercapai tanpa merayakan (data lama)
 (function(){if(P&&P.onboarded&&!LS.get('lk-earned-init',false)){checkMilestones();LS.set('lk-earned-init',true)}})();
 
@@ -194,16 +194,22 @@ function bestEfforts(cum,ts){const out={},total=cum[cum.length-1];
 function splitsOf(cum,ts){const sp=[];let next=1000,prevT=0;for(let j=1;j<cum.length;j++){while(cum[j]>=next){const f=(next-cum[j-1])/(cum[j]-cum[j-1]||1),t=ts[j-1]+(ts[j]-ts[j-1])*f;sp.push(Math.round(t-prevT));prevT=t;next+=1000}}return sp}
 function downsample(tr,max){if(tr.length<=max)return tr;const step=tr.length/max,out=[];for(let i=0;i<max;i++)out.push(tr[Math.floor(i*step)]);out.push(tr[tr.length-1]);return out}
 
+/* ================= native (Capacitor) ================= */
+const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+const NP=n=>NATIVE&&window.Capacitor.Plugins?window.Capacitor.Plugins[n]:null;
 /* ================= perekam ================= */
 const R={st:'idle',mode:PREF.mode||'gps',pts:[],dist:0,mov:0,last:null,lastMoveAt:0,lastTick:0,reset:false,ele:{buf:[],anchor:null,gain:0},win:[],splits:[],splitAt:0,nextKm:1000,
   acc:null,watch:null,timer:null,sim:null,auto:false,started:null,plan:null,segI:0,segLeft:0,err:''};
 function recReset(){Object.assign(R,{st:'idle',pts:[],dist:0,mov:0,last:null,lastMoveAt:0,reset:false,ele:{buf:[],anchor:null,gain:0},win:[],splits:[],splitAt:0,nextKm:1000,acc:null,auto:false,started:null,segI:0,segLeft:R.plan&&R.plan.segs?R.plan.segs[0].sec:0,err:''})}
 function onPos(p){R.acc=p.acc;if(R.st!=='run')return;
   if(p.acc!=null&&p.acc>35)return;
-  if(!R.last||R.reset){R.last=p;R.reset=false;pushPt(p);R.lastMoveAt=Date.now();return}
+  if(!R.last||R.reset){p.mov=R.mov;R.last=p;R.reset=false;pushPt(p);R.lastMoveAt=Date.now();return}
   const d=hav(R.last,p),dt=Math.max(.001,(p.ts-R.last.ts)/1000);
   if(d<3)return; if(d/dt>11)return;
-  R.dist+=d;R.last=p;R.lastMoveAt=Date.now();pushPt(p);
+  // Kalau ada jeda (layar mati, app di background, timer browser tertahan) tapi kamu tetap bergerak,
+  // waktu yang terlewat tetap dihitung sebagai waktu bergerak.
+  const credited=R.mov-(R.last.mov||0);if(dt>4&&dt<3600&&d/dt>=.7&&credited<dt)R.mov+=dt-credited;
+  p.mov=R.mov;R.dist+=d;R.last=p;R.lastMoveAt=Date.now();pushPt(p);
   if(p.alt!=null){const b=R.ele.buf;b.push(p.alt);if(b.length>5)b.shift();const s=b.reduce((a,c)=>a+c,0)/b.length;if(R.ele.anchor==null)R.ele.anchor=s;else if(s-R.ele.anchor>=2){R.ele.gain+=s-R.ele.anchor;R.ele.anchor=s}else if(R.ele.anchor-s>=2)R.ele.anchor=s}
   R.win.push({d:R.dist,t:R.mov});while(R.win.length>2&&R.mov-R.win[0].t>25)R.win.shift();
   while(R.dist>=R.nextKm){const sp=R.mov-R.splitAt;R.splits.push(Math.round(sp));R.splitAt=R.mov;
@@ -213,18 +219,28 @@ function onPos(p){R.acc=p.acc;if(R.st!=='run')return;
 function pushPt(p){R.pts.push([+p.lat.toFixed(5),+p.lon.toFixed(5),p.alt!=null?Math.round(p.alt*10)/10:null,Math.round(R.mov)])}
 function curPace(){if(R.win.length<2)return NaN;const a=R.win[0],b=R.win[R.win.length-1];const dd=b.d-a.d;return dd>15?(b.t-a.t)/(dd/1000):NaN}
 function tick(dtOverride){const now=Date.now();const dt=dtOverride!=null?dtOverride:(now-R.lastTick)/1000;R.lastTick=now;if(R.st!=='run')return;
-  const idle=R.mode!=='nogps'&&PREF.autoPause&&R.pts.length>1&&(dtOverride!=null?false:now-R.lastMoveAt>12000);
-  R.auto=idle;if(!idle)R.mov+=dt;
+  const gpsLive=R.mode!=='nogps'&&R.pts.length>1;
+  const idle=gpsLive&&PREF.autoPause&&(dtOverride!=null?false:now-R.lastMoveAt>12000);
+  R.auto=idle;
+  // dt besar = timer sempat tertahan; di mode GPS waktu itu dihitung dari titik GPS (onPos), bukan dari timer
+  if(!idle&&!(gpsLive&&dt>3))R.mov+=dt;
   if(R.plan&&R.plan.segs&&R.segI<R.plan.segs.length){R.segLeft-=dt;if(R.segLeft<=0){R.segI++;const s=R.plan.segs[R.segI];
     if(s){R.segLeft=s.sec;beep(s.t==='run'?[[990,.15],[990,.15]]:[[520,.6]]);if(has('interval'))say(s.t==='run'?`Lari, ${dur(s.sec)}`:(s.l.startsWith('Pendinginan')?'Pendinginan, jalan santai':`Jalan, ${dur(s.sec)}`))}
     else{beep([[880,.15],[880,.15],[1320,.5]]);say('Sesi selesai. Mantap!')}}}
   renderRec()}
-function startGPS(){if(!('geolocation' in navigator)){gpsFail('Browser ini tidak mendukung GPS.');return}
-  try{R.watch=navigator.geolocation.watchPosition(pos=>{const c=pos.coords;onPos({lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,ts:Date.now()});renderRec()},
+function startGPS(){if(R.watch!=null)return;const BG=NP('BackgroundGeolocation');
+  if(BG){R.watch={bg:null};BG.addWatcher({backgroundTitle:'Langkah merekam larimu',backgroundMessage:'GPS tetap aktif walau layar mati.',requestPermissions:true,stale:false,distanceFilter:0},
+      (loc,err)=>{if(err){if(err.code==='NOT_AUTHORIZED')gpsFail('Izin lokasi ditolak. Buka Pengaturan HP → Aplikasi → Langkah → Izin → Lokasi, lalu pilih "Izinkan".');else gpsFail('GPS tidak tersedia: '+(err.message||err.code));return}
+        R.here=loc;onPos({lat:loc.latitude,lon:loc.longitude,alt:loc.altitude,acc:loc.accuracy,ts:loc.time||Date.now()});renderRec()})
+      .then(id=>{if(R.watch)R.watch.bg=id;else BG.removeWatcher({id})}).catch(e=>gpsFail('GPS tidak bisa dimulai: '+(e.message||e)));return}
+  if(!('geolocation' in navigator)){gpsFail('Browser ini tidak mendukung GPS.');return}
+  try{R.watch=navigator.geolocation.watchPosition(pos=>{const c=pos.coords;R.here={latitude:c.latitude,longitude:c.longitude};R.err='';onPos({lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,ts:Date.now()});renderRec()},
     err=>{if(err.code===1)gpsFail('Akses lokasi ditolak. Di claude.ai, halaman artifact memang tidak boleh memakai GPS. Pakai versi standalone (file HTML yang di-host sendiri) untuk merekam rute, atau pilih "Tanpa GPS".');else if(err.code===3)R.err='Mencari sinyal GPS…';else gpsFail('Sinyal GPS tidak tersedia. Coba di tempat terbuka.')},
     {enableHighAccuracy:true,maximumAge:0,timeout:20000})}catch(e){gpsFail('GPS tidak bisa dipakai di tampilan ini.')}}
 function gpsFail(m){R.err=m;renderRec()}
-function stopGPS(){if(R.watch!=null){try{navigator.geolocation.clearWatch(R.watch)}catch(e){}R.watch=null}}
+function stopGPS(){if(R.watch!=null){try{if(typeof R.watch==='object'){const BG=NP('BackgroundGeolocation');if(BG&&R.watch.bg)BG.removeWatcher({id:R.watch.bg})}else navigator.geolocation.clearWatch(R.watch)}catch(e){}R.watch=null}}
+// GPS dinyalakan begitu halaman Rekam dibuka (mode GPS), supaya sinyal sudah stabil saat kamu menekan Mulai
+function gpsWarm(on){if(on){if(PREF.mode==='gps'&&R.st==='idle')startGPS()}else if(R.st==='idle'||R.st==='done')stopGPS()}
 let SIM={a:0,t:0};
 function startSim(){SIM={a:0,t:Date.now()};const c={lat:-6.1754,lon:106.8272},rad=420;
   R.sim=setInterval(()=>{if(R.st!=='run')return;for(let k=0;k<1;k++){SIM.t+=1000;const sp=2.55+Math.sin(SIM.t/40000)*0.35+(Math.random()-.5)*.25;SIM.a+=sp/rad;
@@ -232,14 +248,14 @@ function startSim(){SIM={a:0,t:Date.now()};const c={lat:-6.1754,lon:106.8272},ra
     tick(1);onPos({lat,lon,alt:22+Math.sin(SIM.a*2)*9+Math.random()*.6,acc:5,ts:SIM.t})}renderRec()},100)}
 function recStart(){audio();recReset();R.st='run';R.started=new Date();R.lastTick=Date.now();R.lastMoveAt=Date.now();R.mode=PREF.mode;
   if(R.plan&&R.plan.segs){R.segI=0;R.segLeft=R.plan.segs[0].sec;beep([[520,.4]]);if(has('interval'))say(`Mulai. ${R.plan.segs[0].l}`)}else beep([[660,.15],[990,.25]]);
-  if(R.mode==='gps')startGPS();
+  if(R.mode==='gps')startGPS();else stopGPS();
   if(R.mode==='sim')startSim();else R.timer=setInterval(()=>tick(),1000);
   wake(true);renderRec()}
 function recPause(){R.st='pause';R.auto=false;beep([[520,.3]]);renderRec()}
 function recResume(){R.st='run';R.reset=true;R.lastTick=Date.now();R.lastMoveAt=Date.now();beep([[660,.15],[990,.25]]);renderRec()}
 function recStop(){clearInterval(R.timer);clearInterval(R.sim);R.timer=R.sim=null;stopGPS();wake(false);try{speechSynthesis.cancel()}catch(e){}}
 function recFinish(){recStop();R.st='done';showSaveForm({src:R.mode==='sim'?'sim':R.mode==='nogps'?'manual':'gps',date:R.started.toISOString(),km:R.dist/1000,sec:Math.round(R.mov),elev:Math.round(R.ele.gain),splits:R.splits.slice(),track:R.pts.slice()})}
-function recDiscard(){recStop();recReset();$('#r-save').hidden=true;$('#r-live').hidden=false;renderRec()}
+function recDiscard(){recStop();recReset();$('#r-save').hidden=true;$('#r-live').hidden=false;renderRec();if(!$('#v-rekam').hidden)gpsWarm(true)}
 
 function renderRec(){
   const main=$('#r-main');if(!main)return;main.dataset.st=R.st;
@@ -250,8 +266,8 @@ function renderRec(){
   const g=$('#r-gps');g.className='gps';
   if(PREF.mode==='nogps'){g.querySelector('span').textContent='Tanpa GPS: hanya waktu'}
   else if(PREF.mode==='sim'){g.classList.add('ok');g.querySelector('span').textContent='Simulasi (data contoh, tidak disimpan)'}
-  else if(R.acc==null){g.querySelector('span').textContent=R.st==='run'?'Mencari sinyal GPS…':'GPS aktif saat mulai'}
-  else{g.classList.add(R.acc<=12?'ok':R.acc<=30?'mid':'bad');g.querySelector('span').textContent=`GPS ±${Math.round(R.acc)} m`}
+  else if(R.acc==null){g.querySelector('span').textContent='Mencari sinyal GPS…'}
+  else{g.classList.add(R.acc<=20?'ok':R.acc<=35?'mid':'bad');g.querySelector('span').textContent=R.st==='idle'?(R.acc<=20?`GPS siap · ±${Math.round(R.acc)} m`:`Sinyal belum stabil (±${Math.round(R.acc)} m), tunggu sebentar`):`GPS ±${Math.round(R.acc)} m`}
   $('#r-clock').textContent=R.started?`Mulai ${pad(R.started.getHours())}.${pad(R.started.getMinutes())}`:'';
   const e=$('#r-err');e.hidden=!R.err;e.textContent=R.err;
   $('#r-dist').textContent=dec(R.dist/1000,2);$('#r-time').textContent=fmt(R.mov);
@@ -283,7 +299,7 @@ function renderRec(){
 }
 $('#r-ctl').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   if(b.id==='rb-start')recStart();else if(b.id==='rb-pause')recPause();else if(b.id==='rb-res')recResume();else if(b.id==='rb-fin'){if(R.mov<5){recDiscard();return}recFinish()}});
-$('#r-mode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;PREF.mode=b.dataset.m;LS.set('lk-pref',PREF);R.err='';renderRec()});
+$('#r-mode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;PREF.mode=b.dataset.m;LS.set('lk-pref',PREF);R.err='';R.acc=null;if(PREF.mode==='gps')gpsWarm(true);else stopGPS();renderRec()});
 function splitsHTML(sp){const mx=Math.max(...sp),mn=Math.min(...sp);return sp.map((s,i)=>`<div class="split ${s===mn&&sp.length>1?'best':''}"><span class="muted">${i+1}</span><span class="sb"><i style="width:${Math.max(18,mn/s*100)}%"></i></span><span>${fmt(s)}</span></div>`).join('')}
 function drawRouteCanvas(cv,track,opt={}){if(!cv)return;const dpr=window.devicePixelRatio||1,w=cv.clientWidth||300,h=cv.clientHeight||200;
   if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr)}
@@ -336,13 +352,13 @@ $('#r-save').addEventListener('click',e=>{const id=e.target.id;
     if($('#sv-time')){const v=parseTime($('#sv-time').value);if(!v){toast('Isi durasi, misalnya 0:32:10');return}r.sec=v;if(r.track)r.track.forEach((p,i,a)=>p[3]=Math.round(v*i/(a.length-1)))}
     if(r.km<0.1){toast('Lari terlalu pendek untuk disimpan (minimal 100 m).');return}
     r.rpe=+$('#sv-rpe').value;r.note=$('#sv-note').value.trim();saveRun(r);PENDING=null;recDiscard()}});
-function saveRun(r){const run={id:uid(),date:r.date,km:+r.km.toFixed(3),sec:r.sec,elev:r.elev||0,rpe:r.rpe||4,note:r.note||'',src:r.src,splits:r.splits||[],bests:{}};
+function saveRun(r){const run={id:uid(),u:Date.now(),date:r.date,km:+r.km.toFixed(3),sec:r.sec,elev:r.elev||0,rpe:r.rpe||4,note:r.note||'',src:r.src,splits:r.splits||[],bests:{}};
   if(r.track&&r.track.length>1){const cum=cumOf(r.track),ts=r.track.map(p=>p[3]);run.bests=bestEfforts(cum,ts);if(!run.splits.length)run.splits=splitsOf(cum,ts);run.track=downsample(r.track,1200)}
   else{BEST.forEach(([k,,D])=>{const m=run.km*1000;if(Math.abs(m-D)/D<=0.03)run.bests[k]=Math.round(run.sec*D/m)})}
   const prev=bestsAll(null);RUNS.push(run);RUNS.sort((a,b)=>a.date.localeCompare(b.date));
   if(!saveRuns())return;
   // tandai sesi program hari itu
-  const ds=iso(pd(run.date)),pl=plan(),dm=doneMap();pl.forEach(w=>w.sess.forEach(s=>{if(iso(sessDate(w.w,s))===ds&&!dm[s.id]&&s.type!=='X')dm[s.id]=1}));LS.set('lk-done',DONE);
+  const ds=iso(pd(run.date)),pl=plan(),dm=doneMap();pl.forEach(w=>w.sess.forEach(s=>{if(iso(sessDate(w.w,s))===ds&&!dm[s.id]&&s.type!=='X')dm[s.id]=1}));saveDone();
   const fresh=[];for(const k in run.bests){const p=prev[k];if((p&&run.bests[k]<p.sec)||(!p&&k!=='1'))fresh.push({kind:'pr',key:k,sec:run.bests[k],run,prev:p?p.sec:null})}
   fresh.push(...checkMilestones());
   location.hash='lari-'+run.id;
@@ -423,7 +439,11 @@ async function drawStory(item){await fontsReady();const W=1080,H=1920,c=document
   if(bg!=='clear')txt(x,'LANGKAH',W/2,CY+CH+80,`700 30px ${SF}`,mu,'center');
   return c}
 let DL=null;(async()=>{try{if(window.claude&&window.claude.use)DL=await window.claude.use('downloads')}catch(e){DL=null}})();
+function blobB64(blob){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=no;r.readAsDataURL(blob)})}
 async function saveBlob(blob,name){
+  // Aplikasi Android: simpan ke cache lalu buka lembar Bagikan (Instagram, Galeri, Drive, WhatsApp…)
+  const FS=NP('Filesystem'),SH=NP('Share');
+  if(FS&&SH){try{const w=await FS.writeFile({path:name,data:await blobB64(blob),directory:'CACHE'});await SH.share({title:'Langkah',files:[w.uri],dialogTitle:'Bagikan atau simpan'});return}catch(e){if(/cancel/i.test(String(e&&e.message)))return;toast('Gagal membagikan: '+((e&&e.message)||e))}return}
   if(DL){try{await DL.save({filename:name,data:blob});toast('Gambar tersimpan. Buka Instagram, pilih Story, lalu ambil dari galeri.');return}catch(e){if(e&&e.code==='declined')return}}
   try{const file=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Langkah'});return}}catch(e){if(e&&e.name==='AbortError')return}
   try{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);toast('Kalau tidak terunduh, tekan lama gambar lalu pilih Simpan.')}catch(e){toast('Tekan lama gambar lalu pilih Simpan gambar.')}}
@@ -457,7 +477,7 @@ $('#sheet').addEventListener('change',async e=>{const id=e.target.id;
   if(id==='st-gray'){ST.gray=e.target.checked;PREF.storyGray=ST.gray;LS.set('lk-pref',PREF);await renderStory()}
   else if(id==='st-file'){const f=e.target.files[0];e.target.value='';if(!f)return;const url=URL.createObjectURL(f);const im=new Image();im.onload=async()=>{ST.img=im;ST.bg='photo';$$('#st-bg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.bg==='photo'));$('#st-photo').hidden=false;$('label[for="st-file"]').textContent='Ganti foto';await renderStory()};im.onerror=()=>toast('Foto tidak bisa dibuka. Coba JPG atau PNG.');im.src=url}});
 $('#sheet').addEventListener('input',e=>{const id=e.target.id;if(id!=='st-title'&&id!=='st-place')return;ST[id==='st-title'?'title':'place']=e.target.value.trim();
-  if(STORY_ITEM&&STORY_ITEM.kind==='run'){const r=RUNS.find(z=>z.id===STORY_ITEM.run.id);if(r){if(id==='st-title')r.storyTitle=ST.title;else r.place=ST.place;saveRuns()}}
+  if(STORY_ITEM&&STORY_ITEM.kind==='run'){const r=RUNS.find(z=>z.id===STORY_ITEM.run.id);if(r){if(id==='st-title')r.storyTitle=ST.title;else r.place=ST.place;touchRun(r);saveRuns();syncSoon()}}
   clearTimeout(stT);stT=setTimeout(renderStory,250)});
 async function celebrate(items,run){CELEB=[...items];if(run)CELEB.push({kind:'run',run});
   await openStory(CELEB[0],items.length>1?`${items.length} pencapaian baru!`:items[0].kind==='pr'?(items[0].prev?'Rekor pribadi baru!':'Rekor pertama tercatat!'):'Pencapaian baru!');
@@ -475,9 +495,12 @@ function makeMap(id){if(!window.L)return null;if(MAPS[id])return MAPS[id];const 
 function mapFallback(){$$('.lmap').forEach(el=>el.hidden=true);$$('canvas.route').forEach(c=>c.hidden=false);$$('.mapnote').forEach(n=>{n.hidden=false;n.textContent='Peta jalanan tidak bisa dimuat di tampilan ini (halaman claude.ai memblokir gambar peta). Rute tetap tergambar; di versi standalone peta tampil penuh.'});
   const fb=$('#r-follow');if(fb)fb.hidden=true;renderRec();const h=location.hash.slice(1);if(h.startsWith('lari-')){const r=RUNS.find(z=>'lari-'+z.id===h);r&&drawRouteCanvas($('#ld-map'),r.track)}}
 function recMapShow(){const box=$('#r-lmap'),cv=$('#r-map');if(!useMap()){box.hidden=true;cv.hidden=false;return}box.hidden=false;cv.hidden=true;const o=makeMap('r-lmap');if(!o)return;
-  setTimeout(()=>{o.m.invalidateSize();if(o.n<=0){const last=R.pts[R.pts.length-1];o.m.setView(last?[last[0],last[1]]:[-6.2,106.82],last?16:12)}updRecMap(true)},60)}
-function updRecMap(force){const o=MAPS['r-lmap'];if(!o||!useMap()||$('#v-rekam').hidden)return;if(!force&&o.n===R.pts.length)return;o.n=R.pts.length;
-  const ll=R.pts.map(p=>[p[0],p[1]]);o.line.setLatLngs(ll);if(!ll.length){if(o.dot){o.dot.remove();o.dot=null}if(o.start){o.start.remove();o.start=null}return}
+  setTimeout(()=>{o.m.invalidateSize();if(!o.n||o.n===-1||String(o.n).startsWith('0|')){const last=R.pts[R.pts.length-1];o.m.setView(last?[last[0],last[1]]:[-6.2,106.82],last?16:12)}updRecMap(true)},60)}
+function updRecMap(force){const o=MAPS['r-lmap'];if(!o||!useMap()||$('#v-rekam').hidden)return;const key=R.pts.length+'|'+(R.here?R.here.latitude+','+R.here.longitude:'');if(!force&&o.n===key)return;o.n=key;
+  const ll=R.pts.map(p=>[p[0],p[1]]);o.line.setLatLngs(ll);
+  if(!ll.length){if(o.start){o.start.remove();o.start=null}
+    if(R.here){const h=[R.here.latitude,R.here.longitude];if(!o.dot)o.dot=L.circleMarker(h,{radius:9,color:'#FFFFFF',weight:4,fillColor:'#CCF33A',fillOpacity:1}).addTo(o.m);else o.dot.setLatLng(h);if(o.follow)o.m.setView(h,Math.max(o.m.getZoom(),16))}
+    else if(o.dot){o.dot.remove();o.dot=null}return}
   const last=ll[ll.length-1];if(!o.start)o.start=L.circleMarker(ll[0],{radius:6,color:'#1D1E21',weight:3,fillColor:'#4D8CF5',fillOpacity:1}).addTo(o.m);
   if(!o.dot)o.dot=L.circleMarker(last,{radius:9,color:'#FFFFFF',weight:4,fillColor:'#CCF33A',fillOpacity:1}).addTo(o.m);else o.dot.setLatLng(last);
   if(o.follow){if(o.m.getZoom()<15)o.m.setView(last,16);else o.m.panTo(last,{animate:true,duration:.4})}}
@@ -486,14 +509,89 @@ function detailMap(r){const box=$('#ld-lmap'),cv=$('#ld-map');if(!box||!r.track)
   const o=makeMap('ld-lmap');const ll=r.track.map(p=>[p[0],p[1]]);o.line.setLatLngs(ll);L.circleMarker(ll[0],{radius:6,color:'#1D1E21',weight:3,fillColor:'#4D8CF5',fillOpacity:1}).addTo(o.m);L.circleMarker(ll[ll.length-1],{radius:7,color:'#1D1E21',weight:3,fillColor:'#EE403B',fillOpacity:1}).addTo(o.m);
   setTimeout(()=>{o.m.invalidateSize();o.m.fitBounds(o.line.getBounds(),{padding:[24,24]})},60)}
 
+/* ================= akun & sinkron (Supabase) ================= */
+// Pakai var supaya aman dipanggil sebelum baris ini dieksekusi (milestone awal memanggil saveEarned saat load).
+var SB=null,SB_USER=null,SB_BUSY=false,SB_T=null,SB_ERR='',SB_LAST=LS.get('lk-sync-last',null);
+function sbConf(){const c=window.LANGKAH_CONFIG||{},o=LS.get('lk-sb',{});return{url:(o.url||c.supabaseUrl||'').trim(),key:(o.key||c.supabaseAnonKey||'').trim()}}
+function sbInit(){if(SB)return SB;const c=sbConf();if(!c.url||!c.key||!window.supabase||!window.supabase.createClient)return null;
+  try{SB=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'lk-auth'}});
+    SB.auth.onAuthStateChange((ev,session)=>{const u=session&&session.user||null,changed=(u&&u.id)!==(SB_USER&&SB_USER.id);SB_USER=u;if(changed){if(u)syncNow();refreshAcct()}});
+    SB.auth.getSession().then(({data})=>{SB_USER=data&&data.session&&data.session.user||null;if(SB_USER)syncNow();refreshAcct()})}catch(e){SB=null;SB_ERR='Konfigurasi Supabase tidak valid.'}
+  return SB}
+function refreshAcct(){if(!$('#v-profil').hidden&&$('#acct'))$('#acct').innerHTML=acctInner()}
+function syncSoon(){if(!SB_USER)return;clearTimeout(SB_T);SB_T=setTimeout(syncNow,2500)}
+function saveDone(){LS.set('lk-done',DONE);LS.set('lk-state-u',Date.now());syncSoon()}
+function saveEarned(){LS.set('lk-earned',EARNED);LS.set('lk-state-u',Date.now());syncSoon()}
+function touchRun(r){r.u=Date.now()}
+function tombRun(id){const t=LS.get('lk-tomb',{});t[id]=Date.now();LS.set('lk-tomb',t)}
+async function syncNow(){const sb=sbInit();if(!sb||!SB_USER||SB_BUSY)return;SB_BUSY=true;SB_ERR='';refreshAcct();const uid=SB_USER.id;
+  try{
+    // 1. tarik lari yang berubah sejak sinkron terakhir
+    let cursor=LS.get('lk-pull-cursor','1970-01-01T00:00:00Z'),pulled=0,changed=false;
+    for(;;){const {data,error}=await sb.from('lk_runs').select('id,data,deleted,updated_at').gt('updated_at',cursor).order('updated_at',{ascending:true}).limit(200);if(error)throw error;
+      for(const row of data){const ru=Date.parse(row.updated_at),i=RUNS.findIndex(r=>r.id===row.id),loc=i>=0?RUNS[i]:null;
+        if(row.deleted){if(loc&&(loc.u||0)<=ru){RUNS.splice(i,1);changed=true}}
+        else if(row.data&&(!loc||(loc.u||0)<ru)){const r=Object.assign({},row.data,{u:ru});if(loc)RUNS[i]=r;else RUNS.push(r);changed=true}
+        cursor=row.updated_at;pulled++}
+      if(data.length<200)break}
+    LS.set('lk-pull-cursor',cursor);
+    if(changed){RUNS.sort((a,b)=>a.date.localeCompare(b.date));LS.set('lk-runs',RUNS)}
+    // 2. kirim lari lokal yang baru/berubah dan yang dihapus
+    const pushedAt=LS.get('lk-pushed-at',0);let maxU=pushedAt;
+    const out=RUNS.filter(r=>{if(!r.u){r.u=Date.parse(r.date)||Date.now();if(r.u<=pushedAt)r.u=Date.now()}return r.u>pushedAt});
+    for(let i=0;i<out.length;i+=15){const rows=out.slice(i,i+15).map(r=>({user_id:uid,id:r.id,data:Object.assign({},r,{u:undefined}),deleted:false,updated_at:new Date(r.u).toISOString()}));
+      const {error}=await sb.from('lk_runs').upsert(rows,{onConflict:'user_id,id'});if(error)throw error;rows.forEach(x=>maxU=Math.max(maxU,Date.parse(x.updated_at)))}
+    const tomb=LS.get('lk-tomb',{}),tids=Object.keys(tomb).filter(id=>tomb[id]>pushedAt);
+    if(tids.length){const rows=tids.map(id=>({user_id:uid,id,data:null,deleted:true,updated_at:new Date(tomb[id]).toISOString()}));const {error}=await sb.from('lk_runs').upsert(rows,{onConflict:'user_id,id'});if(error)throw error;tids.forEach(id=>maxU=Math.max(maxU,tomb[id]))}
+    LS.set('lk-pushed-at',maxU);if(out.length)LS.set('lk-runs',RUNS);
+    // 3. profil, progres program, milestone
+    const {data:st,error:e1}=await sb.from('lk_state').select('*').eq('user_id',uid).maybeSingle();if(e1)throw e1;
+    const firstLink=LS.get('lk-sync-linked',null)!==uid;
+    if(st){if(st.profile&&(firstLink||(+st.profile_u||0)>(P._u||0))){P=Object.assign({},st.profile,{onboarded:true,_u:+st.profile_u||Date.now()});LS.set('lk-profile',P);PLAN_SIG='';changed=true}
+      for(const k in (st.done||{})){DONE[k]=Object.assign({},st.done[k],DONE[k]||{})}
+      for(const k in (st.earned||{})){if(!EARNED[k]||st.earned[k]<EARNED[k])EARNED[k]=st.earned[k]}
+      LS.set('lk-done',DONE);LS.set('lk-earned',EARNED)}
+    const {error:e2}=await sb.from('lk_state').upsert({user_id:uid,profile:P,profile_u:P._u||Date.now(),done:DONE,earned:EARNED,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(e2)throw e2;
+    LS.set('lk-sync-linked',uid);SB_LAST=new Date().toISOString();LS.set('lk-sync-last',SB_LAST);
+    if(changed||pulled){PLAN_SIG='';route()}
+  }catch(e){SB_ERR=(e&&e.message)||'Sinkron gagal.';if(/fetch|network/i.test(SB_ERR))SB_ERR='Tidak bisa terhubung ke server. Cek koneksi internet atau Project URL.';if(/relation .* does not exist|lk_runs|lk_state/.test(SB_ERR))SB_ERR='Tabel belum dibuat. Jalankan supabase/schema.sql di SQL Editor Supabase.'}
+  finally{SB_BUSY=false;refreshAcct()}}
+function acctInner(){const c=sbConf();
+  if(!c.url||!c.key||!window.supabase)return `<p class="small muted">Sinkron menyimpan lari, profil, dan pencapaian ke akunmu, sehingga data di aplikasi Android dan web sama. Isi alamat proyek Supabase dulu (Project Settings → API).</p>
+    <div class="row"><label class="f" for="sb-url" style="flex:1 1 240px">Project URL<input id="sb-url" placeholder="https://xxxx.supabase.co" value="${esc(c.url)}"></label><label class="f" for="sb-key" style="flex:1 1 240px">Anon public key<input id="sb-key" placeholder="eyJhbGciOi…" value="${esc(c.key)}"></label></div>
+    <div class="row"><button class="btn pri" type="button" id="sb-conf">Simpan</button></div>`;
+  if(!SB_USER)return `<p class="small muted">Masuk untuk menyinkronkan data antara aplikasi Android dan web. Belum punya akun? Isi email dan kata sandi, lalu tekan Daftar.</p>
+    <div class="row"><label class="f" for="sb-email" style="flex:1 1 200px">Email<input id="sb-email" type="email" autocomplete="email" placeholder="nama@email.com"></label><label class="f" for="sb-pass" style="flex:1 1 160px">Kata sandi<input id="sb-pass" type="password" autocomplete="current-password" placeholder="min. 6 karakter"></label></div>
+    <div class="row"><button class="btn pri" type="button" id="sb-in">Masuk</button><button class="btn" type="button" id="sb-up">Daftar</button><button class="btn ghost sm" type="button" id="sb-reset-conf">Ganti server</button></div>
+    ${SB_ERR?`<p class="note red small">${esc(SB_ERR)}</p>`:''}`;
+  return `<div class="between"><div class="stack" style="gap:2px"><b>${esc(SB_USER.email||'Akun')}</b><span class="small muted">${SB_BUSY?'Menyinkronkan…':SB_LAST?`Terakhir sinkron ${dShort(new Date(SB_LAST))} ${pad(new Date(SB_LAST).getHours())}.${pad(new Date(SB_LAST).getMinutes())}`:'Belum pernah sinkron'}</span></div><span class="chip ${SB_ERR?'c-R':'c-Q'}">${SB_ERR?'Gagal':'Tersambung'}</span></div>
+    ${SB_ERR?`<p class="note red small">${esc(SB_ERR)}</p>`:''}
+    <div class="row"><button class="btn pri" type="button" id="sb-sync" ${SB_BUSY?'disabled':''}>Sinkron sekarang</button><button class="btn ghost" type="button" id="sb-out">Keluar</button></div>
+    <p class="tiny muted">Sinkron otomatis saat aplikasi dibuka dan setiap ada lari baru. Data tetap tersimpan di HP walau sedang offline.</p>`}
+function acctCard(){return `<div class="card stack"><h3>Akun & sinkron</h3><div class="stack" id="acct">${acctInner()}</div></div>`}
+document.addEventListener('click',async e=>{const id=e.target.id;if(!id.startsWith('sb-'))return;
+  if(id==='sb-conf'){const url=$('#sb-url').value.trim(),key=$('#sb-key').value.trim();if(!/^https:\/\/.+/.test(url)||key.length<20){toast('Isi Project URL (https://…supabase.co) dan anon key.');return}LS.set('lk-sb',{url,key});SB=null;sbInit();refreshAcct();toast('Server tersimpan. Sekarang masuk atau daftar.');return}
+  if(id==='sb-reset-conf'){LS.del('lk-sb');SB=null;refreshAcct();return}
+  const sb=sbInit();if(!sb)return;
+  if(id==='sb-in'||id==='sb-up'){const email=$('#sb-email').value.trim(),password=$('#sb-pass').value;if(!email||password.length<6){toast('Isi email dan kata sandi (minimal 6 karakter).');return}
+    e.target.disabled=true;SB_ERR='';
+    const {data,error}=id==='sb-in'?await sb.auth.signInWithPassword({email,password}):await sb.auth.signUp({email,password});
+    e.target.disabled=false;
+    if(error){SB_ERR=/fetch|network/i.test(error.message)?'Tidak bisa terhubung ke server. Cek koneksi internet atau Project URL.':/Invalid login/i.test(error.message)?'Email atau kata sandi salah.':/confirm/i.test(error.message)?'Email belum dikonfirmasi. Buka email dari Supabase, klik tautannya, lalu masuk lagi.':error.message;refreshAcct();return}
+    if(id==='sb-up'&&!data.session){toast('Akun dibuat. Cek email untuk konfirmasi, lalu tekan Masuk.');return}
+    toast('Masuk berhasil. Menyinkronkan…')}
+  else if(id==='sb-sync')syncNow();
+  else if(id==='sb-out'){await sb.auth.signOut();SB_USER=null;LS.del('lk-pull-cursor');LS.del('lk-pushed-at');LS.del('lk-sync-linked');refreshAcct();toast('Keluar dari akun. Data di HP ini tetap ada.')}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncSoon()});
+
 /* ================= routing ================= */
 const VIEWS=['beranda','program','rekam','riwayat','alat','pencapaian','profil','lari'];
-function route(){if(!P||!P.onboarded){showOnb();return}$('#onb').hidden=true;
+function route(){if(!NATIVE&&!LS.get('lk-lp',false)){showLP();return}$('#lp').hidden=true;if(!P||!P.onboarded){showOnb();return}$('#onb').hidden=true;
   let h=location.hash.slice(1),v=h.startsWith('lari-')?'lari':(VIEWS.includes(h)?h:'beranda');
-  VIEWS.forEach(x=>$('#v-'+x).hidden=x!==v);
+  VIEWS.forEach(x=>$('#v-'+x).hidden=x!==v);if(v!=='rekam')gpsWarm(false);
   $$('#nav a').forEach(a=>a.setAttribute('aria-current',a.dataset.v===v?'page':'false'));
   updHead();
-  ({beranda:rBeranda,program:rProgram,rekam:()=>{renderRec();recMapShow()},riwayat:rRiwayat,alat:rAlat,pencapaian:rPencapaian,profil:rProfil,lari:()=>rLari(h.slice(5))})[v]();
+  ({beranda:rBeranda,program:rProgram,rekam:()=>{renderRec();recMapShow();gpsWarm(true)},riwayat:rRiwayat,alat:rAlat,pencapaian:rPencapaian,profil:rProfil,lari:()=>rLari(h.slice(5))})[v]();
   window.scrollTo(0,0)}
 window.addEventListener('hashchange',route);
 window.addEventListener('resize',()=>{if(!$('#v-rekam').hidden)renderRec();if(!$('#v-lari').hidden){const r=RUNS.find(z=>'lari-'+z.id===location.hash.slice(1));r&&drawRouteCanvas($('#ld-map'),r.track)}});
@@ -586,7 +684,7 @@ document.addEventListener('click',e=>{
   const ms=e.target.closest('[data-ms]');if(ms){const m=MS.find(z=>z.id===ms.dataset.ms);CELEB=null;openStory({kind:'ms',m,date:EARNED[m.id]});return}
   const pr=e.target.closest('[data-pr]');if(pr){const b=bestsAll(null)[pr.dataset.pr];if(b){CELEB=null;openStory({kind:'pr',key:pr.dataset.pr,sec:b.sec,run:b.run,prev:null})}return}
   const rc=e.target.closest('[data-rec]');if(rc){const [w,id]=rc.dataset.rec.split('|');loadSession(+w,id);return}
-  const dn=e.target.closest('[data-done]');if(dn){const dm=doneMap();dm[dn.dataset.done]=1;LS.set('lk-done',DONE);const f=checkMilestones();route();if(f.length)celebrate(f);else toast('Sesi ditandai selesai');return}
+  const dn=e.target.closest('[data-done]');if(dn){const dm=doneMap();dm[dn.dataset.done]=1;saveDone();const f=checkMilestones();route();if(f.length)celebrate(f);else toast('Sesi ditandai selesai');return}
 });
 function loadSession(w,id){const wk=plan().find(x=>x.w===w),s=wk&&wk.sess.find(x=>x.id===id);if(!s)return;
   if(R.st==='run'||R.st==='pause'){toast('Selesaikan rekaman yang sedang berjalan dulu.');location.hash='rekam';return}
@@ -629,7 +727,7 @@ function rProgram(){const v=$('#v-program'),pl=plan(),dm=doneMap(),wn=weekNow(),
    `<div class="card stack"><h3>Cara membaca program</h3><div class="stack small"><p><span class="chip c-E">Easy</span> Lari santai, mayoritas volume. Kalau ragu, lebih pelan.</p><p><span class="chip c-Q">Kualitas</span> Tempo, interval, atau marathon pace. Selalu pemanasan 10–15 mnt.</p><p><span class="chip c-L">Long run</span> Bangun daya tahan. Pace easy, fokus waktu di kaki.</p><p>Setiap minggu ke-4 adalah minggu ringan (volume turun ±20%) supaya tubuh sempat beradaptasi.</p></div></div>`}`;
 }
 document.addEventListener('change',e=>{const t=e.target;
-  if(t.dataset.sid){const dm=doneMap();if(t.checked)dm[t.dataset.sid]=1;else delete dm[t.dataset.sid];LS.set('lk-done',DONE);const f=checkMilestones();const open=$$('#v-program .week').map(x=>x.open);rProgram();$$('#v-program .week').forEach((x,i)=>x.open=open[i]);if(f.length)celebrate(f);return}
+  if(t.dataset.sid){const dm=doneMap();if(t.checked)dm[t.dataset.sid]=1;else delete dm[t.dataset.sid];saveDone();const f=checkMilestones();const open=$$('#v-program .week').map(x=>x.open);rProgram();$$('#v-program .week').forEach((x,i)=>x.open=open[i]);if(f.length)celebrate(f);return}
   const id=t.id;if(!id.startsWith('pg-'))return;
   if(id==='pg-goal')P.goal=t.value;else if(id==='pg-start'&&t.value)P.planStart=iso(monday(pd(t.value)));else if(id==='pg-cond')P.cond=+t.value;
   else if(id==='pg-base')P.baseKm=Math.max(5,+t.value||20);else if(id==='pg-rd')P.raceDist=t.value;
@@ -689,7 +787,7 @@ document.addEventListener('submit',e=>{if(e.target.id!=='rw-form')return;e.preve
   const hr=$('#mf-hour').value;saveRun({src:'manual',date:hr?new Date(`${$('#mf-date').value}T${hr}:00`).toISOString():$('#mf-date').value,km,sec,elev:+$('#mf-elev').value||0,rpe:+$('#mf-rpe').value,note:$('#mf-note').value.trim(),splits:[],track:null})});
 document.addEventListener('change',async e=>{if(e.target.id!=='bk-in')return;const f=e.target.files[0];e.target.value='';if(!f)return;
   try{const d=JSON.parse(await f.text());if(d.app!=='langkah'||!Array.isArray(d.runs))throw 0;P=d.profile||P;RUNS=d.runs;DONE=d.done||{};EARNED=d.earned||{};PREF=Object.assign(PREF,d.pref||{});
-    saveP();saveRuns();LS.set('lk-done',DONE);LS.set('lk-earned',EARNED);LS.set('lk-pref',PREF);PLAN_SIG='';toast(`Cadangan dipulihkan: ${RUNS.length} lari.`);route()}catch(err){toast('File ini bukan cadangan Langkah.')}});
+    saveP();saveRuns();saveDone();saveEarned();LS.set('lk-pref',PREF);PLAN_SIG='';toast(`Cadangan dipulihkan: ${RUNS.length} lari.`);route()}catch(err){toast('File ini bukan cadangan Langkah.')}});
 
 /* ================= detail lari ================= */
 function rLari(id){const v=$('#v-lari'),r=RUNS.find(x=>x.id===id);if(!r){v.innerHTML=`<div class="card empty"><p>Lari tidak ditemukan.</p><a class="btn" href="#riwayat">Ke riwayat</a></div>`;return}
@@ -717,9 +815,9 @@ function elevChart(tr){const cum=cumOf(tr),pts=tr.map((p,i)=>[cum[i],p[2]]).filt
   [lo,hi].forEach(e=>g+=`<text x="${pl-6}" y="${Y(e)+4}" text-anchor="end">${e} m</text>`);
   for(let k=0;k<=mx/1000;k+=Math.max(1,Math.ceil(mx/1000/6)))g+=`<text x="${X(k*1000)}" y="${h-6}" text-anchor="middle">${k} km</text>`;
   return `<div class="tbl"><svg viewBox="0 0 ${w} ${h}" width="100%" style="min-width:420px;display:block" role="img" aria-label="Profil elevasi">${g}</svg></div>`}
-document.addEventListener('change',e=>{const t=e.target;if(!t.dataset.run)return;const r=RUNS.find(x=>x.id===t.dataset.run);if(!r)return;if(t.id==='ld-rpe')r.rpe=+t.value;if(t.id==='ld-note')r.note=t.value.trim();saveRuns();toast('Tersimpan')});
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset.run)return;const r=RUNS.find(x=>x.id===t.dataset.run);if(!r)return;if(t.id==='ld-rpe')r.rpe=+t.value;if(t.id==='ld-note')r.note=t.value.trim();touchRun(r);saveRuns();syncSoon();toast('Tersimpan')});
 document.addEventListener('click',e=>{const id=e.target.id;if(id==='ld-del')$('#ld-conf').hidden=false;else if(id==='ld-keep')$('#ld-conf').hidden=true;
-  else if(id==='ld-del2'){RUNS=RUNS.filter(x=>x.id!==e.target.dataset.run);saveRuns();toast('Lari dihapus');location.hash='riwayat'}});
+  else if(id==='ld-del2'){tombRun(e.target.dataset.run);RUNS=RUNS.filter(x=>x.id!==e.target.dataset.run);saveRuns();syncSoon();toast('Lari dihapus');location.hash='riwayat'}});
 
 /* ================= Alat ================= */
 const ZN=[[.5,.6,'Pemulihan','Pemanasan, pendinginan, jalan cepat','Sangat ringan'],[.6,.7,'Aerobik dasar','Easy run dan long run','Bisa ngobrol kalimat utuh'],[.7,.8,'Tempo','Lari agak cepat, steady','Hanya beberapa kata'],[.8,.9,'Ambang','Tempo dan interval panjang','Napas berat'],[.9,1,'Maksimal','Interval pendek, sprint','Tidak bisa bicara']];
@@ -791,6 +889,8 @@ function rProfil(){const v=$('#v-profil');
   v.innerHTML=`<div class="vhead"><div><span class="eyebrow">Profil</span><h2 class="disp">${esc(P.name||'Pelari')}</h2></div></div>
   <div class="card stack"><h3>Level</h3><p class="small muted">Ganti level kapan saja. Program, fitur, dan target konsistensi menyesuaikan. Catatan lari tidak berubah.</p>
     <div class="lvls" id="pf-lvl">${Object.entries(LEVELS).map(([k,L])=>lvlCard(k,L,k===P.level)).join('')}</div></div>
+  ${acctCard()}
+  ${NATIVE?'':`<div class="card stack"><h3>Aplikasi Android</h3><p class="small muted">GPS tetap merekam walau layar mati. Masuk dengan akun yang sama supaya datanya tersambung dengan website ini.</p><div class="row"><a class="btn" href="${APK_URL}" target="_blank" rel="noopener">Unduh APK terbaru</a><button class="btn ghost sm" type="button" id="lp-again">Lihat halaman pilihan akses</button></div></div>`}
   <div class="card stack"><h3>Data diri</h3><div class="row">
     <label class="f" for="pf-name" style="flex:1 1 180px">Nama panggilan<input id="pf-name" value="${esc(P.name)}" maxlength="24"></label>
     <label class="f" for="pf-age">Umur<input id="pf-age" type="number" min="12" max="90" class="w-s" value="${P.age}"></label>
@@ -817,6 +917,22 @@ document.addEventListener('change',e=>{const t=e.target,id=t.id;
   else if(id==='pf-name'){P.name=t.value.trim();saveP();updHead()}
   else if(id==='pf-age'){P.age=+t.value||25;saveP()}else if(id==='pf-rest'){P.restHR=+t.value||70;saveP()}else if(id==='pf-max'){P.maxHR=+t.value||null;saveP()}else if(id==='pf-w'){P.weight=+t.value||null;saveP()}});
 
+/* ================= Landing: web atau aplikasi ================= */
+const APK_URL='https://github.com/jadilebihfit/running-tracker/releases/latest';
+function showLP(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);$('#onb').hidden=true;const o=$('#lp');o.hidden=false;
+  o.innerHTML=`<div class="onb lp"><span class="wm" style="font-size:1.9rem">Langkah<i></i></span>
+   <h1>Mau lari pakai <em>apa</em> hari ini?</h1>
+   <p class="muted" style="font-size:1.05rem;max-width:56ch">Pilih cara pakai Langkah. Dua-duanya punya fitur yang sama dan bisa dipakai bergantian.</p>
+   <div class="lvls">
+     <button class="lvl" type="button" id="lp-web"><span class="ln"><i>W</i>Website</span><span class="tg">Langsung pakai di browser, tanpa install.</span>
+       <ul><li>Bisa dibuka di HP maupun laptop</li><li>Bisa ditambahkan ke layar utama</li><li>GPS berhenti kalau layar HP mati</li></ul><span class="btn pri" style="justify-self:start">Lanjut di website</span></button>
+     <a class="lvl" href="${APK_URL}" target="_blank" rel="noopener" id="lp-app" style="text-decoration:none"><span class="ln"><i>A</i>Aplikasi Android</span><span class="tg">Install APK untuk rekaman paling akurat.</span>
+       <ul><li>GPS tetap jalan walau layar mati</li><li>Notifikasi saat merekam</li><li>Bagikan story langsung ke Instagram</li></ul><span class="btn" style="justify-self:start">Unduh APK</span></a>
+   </div>
+   <div class="note blue"><b>Data kamu tersambung antara aplikasi dan website.</b> Masuk dengan akun yang sama di keduanya (Profil → Akun &amp; sinkron), maka lari, program, dan pencapaian otomatis sama. Tanpa masuk akun, data hanya tersimpan di perangkat yang sedang dipakai dan tidak ikut pindah.</div>
+   <p class="tiny muted">Aplikasi Android belum ada di Play Store. Setelah unduh, buka file APK dan izinkan "Instal dari sumber tidak dikenal" kalau diminta. iPhone: pakai website, lalu Share → Add to Home Screen.</p></div>`}
+document.addEventListener('click',e=>{if(e.target.id==='lp-again'){LS.del('lk-lp');route();return}if(e.target.closest('#lp-web')){LS.set('lk-lp',true);route()}else if(e.target.closest('#lp-app')){LS.set('lk-lp',true)}});
+
 /* ================= Onboarding ================= */
 let OB={step:0,d:null};
 function showOnb(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);const o=$('#onb');o.hidden=false;if(!OB.d)OB.d=defaultProfile('pemula');rOnb()}
@@ -824,7 +940,7 @@ function rOnb(){const o=$('#onb'),d=OB.d,L=LEVELS[d.level];const steps=`<div cla
   if(OB.step===0)o.innerHTML=`<div class="onb">${steps}<span class="wm" style="font-size:2rem">Langkah<i></i></span><h1>Lari yang <em>pas</em> buat levelmu.</h1>
     <p class="muted" style="font-size:1.08rem;max-width:56ch">Program latihan, rekam GPS, target pace, rekor otomatis, dan milestone yang bisa kamu pamerin di Instagram Story. Semua data tersimpan di HP-mu sendiri, tanpa akun dan tanpa server.</p>
     <label class="f" for="ob-name" style="max-width:360px">Nama panggilan<input id="ob-name" value="${esc(d.name)}" placeholder="mis. Raka" maxlength="24" autocomplete="nickname"></label>
-    <div class="row"><button class="btn pri big" type="button" id="ob-next">Lanjut</button>${(RUNS.length||LS.get('la-log',null))?'':`<label class="btn ghost" for="bk-in">Pulihkan cadangan</label><input type="file" id="bk-in" accept=".json,application/json" hidden>`}</div></div>`;
+    <div class="row"><button class="btn pri big" type="button" id="ob-next">Lanjut</button><button class="btn" type="button" id="ob-login">Sudah punya akun? Masuk</button>${(RUNS.length||LS.get('la-log',null))?'':`<label class="btn ghost" for="bk-in">Pulihkan cadangan</label><input type="file" id="bk-in" accept=".json,application/json" hidden>`}</div></div>`;
   else if(OB.step===1)o.innerHTML=`<div class="onb">${steps}<h1>Seberapa jauh perjalanan larimu?</h1><p class="muted">Bisa diganti kapan saja di Profil.</p>
     <div class="lvls" id="ob-lvl">${Object.entries(LEVELS).map(([k,x])=>lvlCard(k,x,k===d.level)).join('')}</div>
     <div class="row"><button class="btn pri big" type="button" id="ob-next">Lanjut sebagai ${L.name}</button><button class="btn ghost" type="button" id="ob-back">Kembali</button></div></div>`;
@@ -846,6 +962,7 @@ function rOnb(){const o=$('#onb'),d=OB.d,L=LEVELS[d.level];const steps=`<div cla
 }
 $('#onb').addEventListener('click',e=>{const d=OB.d;const l=e.target.closest('[data-lvl]');if(l){const nm=d.name;OB.d=defaultProfile(l.dataset.lvl);OB.d.name=nm;rOnb();return}
   const id=e.target.id;
+  if(id==='ob-login'){P=defaultProfile('pemula');P.onboarded=true;P._u=0;LS.set('lk-profile',P);PLAN_SIG='';$('#onb').hidden=true;location.hash='profil';route();toast('Masuk ke akunmu di bagian Akun & sinkron.');return}
   if(id==='ob-next'){if(OB.step===0)d.name=$('#ob-name').value.trim();OB.step++;rOnb();window.scrollTo(0,0)}
   else if(id==='ob-back'){OB.step--;rOnb()}
   else if(id==='ob-fin'){d.age=+$('#ob-age').value||25;d.restHR=+$('#ob-rest').value||70;d.weight=+$('#ob-w').value||null;d.goal=$('#ob-goal').value;d.days=+$('#ob-days').value;
@@ -855,6 +972,6 @@ $('#onb').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='ob-n
 
 /* ================= mulai ================= */
 if(P&&P.onboarded&&!P.features)P.features=[...LEVELS[P.level].feats];
-renderPlanCard();route();renderRec();
+renderPlanCard();route();renderRec();sbInit();
 window.addEventListener('beforeunload',e=>{if(R.st==='run'||R.st==='pause'){e.preventDefault();e.returnValue=''}});
 })();

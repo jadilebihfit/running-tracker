@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ikon Langkah: lingkaran lime dengan huruf L gelap. Area aman ikon adaptif = 66dp di tengah. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#CCF33A"
+        android:pathData="M54,25a29,29 0,1 1,0 58a29,29 0,1 1,0 -58z"/>
+    <path android:fillColor="#15160F"
+        android:pathData="M45,40h8v22h14v7h-22z"/>
+</vector>
