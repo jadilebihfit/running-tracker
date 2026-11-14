@@ -939,6 +939,7 @@ document.addEventListener('change',e=>{const t=e.target,id=t.id;
   else if(id==='pf-age'){P.age=+t.value||25;saveP()}else if(id==='pf-rest'){P.restHR=+t.value||70;saveP()}else if(id==='pf-max'){P.maxHR=+t.value||null;saveP()}else if(id==='pf-w'){P.weight=+t.value||null;saveP()}});
 
 /* ================= Landing: web atau aplikasi ================= */
+const LOGO='<svg class="logo-mark" viewBox="24 24 64 60" aria-hidden="true"><path d="M65.87,63.96 A15.5,15.5 0 1 1 65.87,44.04" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="2.4" stroke-linecap="round"/><path d="M72.39,69.43 A24,24 0 1 1 72.39,38.57" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"/><circle cx="78.5" cy="54" r="5" fill="currentColor"/></svg>';
 const APK_URL='https://github.com/jadilebihfit/running-tracker/releases/latest/download/cupuberlari.apk';
 const APK_PAGE='https://github.com/jadilebihfit/running-tracker/releases/latest';
 function showLP(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);$('#onb').hidden=true;const o=$('#lp');o.hidden=false;
@@ -948,7 +949,7 @@ function showLP(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);$('#onb').hidden=true
     go:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
     sync:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></svg>'};
   o.innerHTML=`<div class="lpw">
-   <header class="lp-head"><span class="lp-logo">C</span><span class="wm">cupuberlari<i></i></span></header>
+   <header class="lp-head"><span class="lp-logo">${LOGO}</span><span class="wm">cupuberlari<i></i></span></header>
    <section class="lp-hero"><span class="eyebrow">Running tracker</span><h1>Lari bareng <em>cupuberlari.</em></h1>
      <p>Program latihan, rekam GPS, rekor otomatis, dan story milestone. Pilih mau pakai lewat mana.</p></section>
    <div class="lp-opts">
@@ -964,7 +965,7 @@ document.addEventListener('click',e=>{if(e.target.id==='lp-again'){LS.del('lk-lp
 let OB={step:0,d:null};
 function showOnb(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);const o=$('#onb');o.hidden=false;if(!OB.d)OB.d=defaultProfile('pemula');rOnb()}
 function rOnb(){const o=$('#onb'),d=OB.d,L=LEVELS[d.level];const steps=`<div class="steps" aria-hidden="true">${[0,1,2].map(i=>`<i class="${i<=OB.step?'on':''}"></i>`).join('')}</div>`;
-  if(OB.step===0)o.innerHTML=`<div class="onb">${steps}<span class="wm" style="font-size:2rem">cupuberlari<i></i></span><h1>Lari yang <em>pas</em> buat levelmu.</h1>
+  if(OB.step===0)o.innerHTML=`<div class="onb">${steps}<span class="lp-head"><span class="lp-logo">${LOGO}</span><span class="wm" style="font-size:1.6rem">cupuberlari<i></i></span></span><h1>Lari yang <em>pas</em> buat levelmu.</h1>
     <p class="muted" style="font-size:1.08rem;max-width:56ch">Program latihan, rekam GPS, target pace, rekor otomatis, dan milestone yang bisa kamu pamerin di Instagram Story. Semua data tersimpan di HP-mu sendiri, tanpa akun dan tanpa server.</p>
     <label class="f" for="ob-name" style="max-width:360px">Nama panggilan<input id="ob-name" value="${esc(d.name)}" placeholder="mis. Raka" maxlength="24" autocomplete="nickname"></label>
     <div class="row"><button class="btn pri big" type="button" id="ob-next">Lanjut</button><button class="btn" type="button" id="ob-login">Sudah punya akun? Masuk</button>${(RUNS.length||LS.get('la-log',null))?'':`<label class="btn ghost" for="bk-in">Pulihkan cadangan</label><input type="file" id="bk-in" accept=".json,application/json" hidden>`}</div></div>`;

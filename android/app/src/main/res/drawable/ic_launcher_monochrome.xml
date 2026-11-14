@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo cupuberlari: huruf c berbentuk lintasan lari dua lajur + titik pelari. Area aman ikon adaptif = 66dp di tengah. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M65.87,63.96 A15.5,15.5 0 1 1 65.87,44.04" android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4" android:strokeLineCap="round"/>
+    <path android:pathData="M72.39,69.43 A24,24 0 1 1 72.39,38.57" android:strokeColor="#FFFFFF"
+        android:strokeWidth="8" android:strokeLineCap="round"/>
+    <path android:pathData="M78.5,49a5,5 0 1,1 0,10a5,5 0 1,1 0,-10z" android:fillColor="#FFFFFF"/>
+</vector>
