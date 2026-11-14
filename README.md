@@ -27,13 +27,18 @@ cd src && python3 -m http.server 8000
 
 Lalu buka http://localhost:8000. Untuk mencoba GPS dari HP di jaringan yang sama, perlu HTTPS (pakai hasil build di Netlify).
 
+## Buka aplikasinya
+
+https://jadilebihfit.github.io/running-tracker/
+
 ## Build dan deploy
 
 ```bash
 python3 build.py
 ```
 
-- `dist/index.html` → seret ke https://app.netlify.com/drop (gratis, otomatis HTTPS). Buka dari HP, Share → Add to Home Screen.
+- `index.html` di root → otomatis tampil di GitHub Pages setelah di-push (Settings → Pages → Deploy from branch → `main` / root).
+- `dist/index.html` → bisa juga diseret ke https://app.netlify.com/drop (gratis, otomatis HTTPS). Buka dari HP, Share → Add to Home Screen.
 - `dist/artifact.html` → versi untuk artifact claude.ai (GPS dan gambar peta diblokir di sana, otomatis memakai mode tanpa GPS, impor GPX, dan gambar rute).
 
 ## Peta bagian kode (app.js)

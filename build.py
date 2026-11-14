@@ -4,6 +4,7 @@
 
 Hasil:
   dist/index.html     -> untuk di-hosting (Netlify Drop, GitHub Pages). GPS + peta aktif.
+  index.html         -> salinan dist/index.html di root, untuk GitHub Pages.
   dist/artifact.html  -> versi tanpa <!doctype>/<head>, untuk dipublish sebagai artifact claude.ai.
 """
 import base64, os, re
@@ -48,6 +49,11 @@ def main():
     with open(os.path.join(DIST, "artifact.html"), "w", encoding="utf-8") as f:
         f.write(keep + body.strip() + "\n")
 
+    # salinan di root repo supaya GitHub Pages (deploy from branch, root) langsung menampilkan aplikasi
+    with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print("OK  index.html (root, untuk GitHub Pages)")
     print("OK  dist/index.html  (%d KB)" % (os.path.getsize(os.path.join(DIST, "index.html")) // 1024))
     print("OK  dist/artifact.html")
 
