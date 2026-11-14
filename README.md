@@ -1,4 +1,4 @@
-# Langkah — aplikasi lari
+# cupuberlari — running tracker
 
 Aplikasi lari berbasis web untuk pelari pemula, menengah, dan pro. Tanpa server, tanpa database, tanpa API berbayar. Semua data disimpan di browser HP pengguna (`localStorage`).
 
@@ -6,17 +6,16 @@ Aplikasi lari berbasis web untuk pelari pemula, menengah, dan pro. Tanpa server,
 
 Langkah tersedia sebagai **website** dan **aplikasi Android** (Capacitor). Data keduanya tersambung lewat akun Supabase.
 
-### 1. Siapkan Supabase (sekali saja, gratis)
-1. Buat proyek di https://supabase.com → New project.
-2. Buka **SQL Editor → New query**, tempel isi `supabase/schema.sql`, lalu **Run**.
-3. Buka **Project Settings → API**, salin **Project URL** dan **anon public key** ke `src/config.js`, lalu push. (Atau isi langsung di aplikasi: Profil → Akun & sinkron.)
-4. Opsional: **Authentication → Sign In / Providers → Email**, matikan *Confirm email* supaya pendaftaran tidak perlu klik email.
+### 1. Supabase (sudah terpasang)
+Proyek Supabase **cupuberlari** (region Singapura) sudah dibuat dan terhubung lewat `src/config.js`. Tabel `lk_state` dan `lk_runs` beserta Row Level Security ada di `supabase/schema.sql`. Pengguna cukup daftar/masuk di Profil → Akun & sinkron.
 
-Anon key memang aman berada di kode aplikasi; setiap pengguna hanya bisa membaca dan menulis datanya sendiri karena Row Level Security di `schema.sql`.
+Pengaturan yang sebaiknya diubah sekali di dashboard Supabase (Authentication):
+- **URL Configuration → Site URL**: `https://jadilebihfit.github.io/running-tracker/` supaya tautan konfirmasi email membuka aplikasi, bukan localhost.
+- Opsional: **Sign In / Providers → Email → Confirm email** dimatikan supaya daftar langsung bisa masuk tanpa klik email.
 
 ### 2. Dapatkan APK
-Setiap push ke `main` menjalankan GitHub Actions (`.github/workflows/android.yml`) yang membuat APK dan menaruhnya di halaman **Releases**:
-https://github.com/jadilebihfit/running-tracker/releases/latest
+Setiap push ke `main` menjalankan GitHub Actions (`.github/workflows/android.yml`) yang membuat APK dan menaruhnya di halaman **Releases**. Tautan unduh langsung (selalu versi terbaru):
+https://github.com/jadilebihfit/running-tracker/releases/latest/download/cupuberlari.apk
 
 Unduh dari HP Android, buka file-nya, izinkan "Instal dari sumber tidak dikenal" kalau diminta.
 

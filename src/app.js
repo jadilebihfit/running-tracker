@@ -229,8 +229,8 @@ function tick(dtOverride){const now=Date.now();const dt=dtOverride!=null?dtOverr
     else{beep([[880,.15],[880,.15],[1320,.5]]);say('Sesi selesai. Mantap!')}}}
   renderRec()}
 function startGPS(){if(R.watch!=null)return;const BG=NP('BackgroundGeolocation');
-  if(BG){R.watch={bg:null};BG.addWatcher({backgroundTitle:'Langkah merekam larimu',backgroundMessage:'GPS tetap aktif walau layar mati.',requestPermissions:true,stale:false,distanceFilter:0},
-      (loc,err)=>{if(err){if(err.code==='NOT_AUTHORIZED')gpsFail('Izin lokasi ditolak. Buka Pengaturan HP → Aplikasi → Langkah → Izin → Lokasi, lalu pilih "Izinkan".');else gpsFail('GPS tidak tersedia: '+(err.message||err.code));return}
+  if(BG){R.watch={bg:null};BG.addWatcher({backgroundTitle:'cupuberlari merekam larimu',backgroundMessage:'GPS tetap aktif walau layar mati.',requestPermissions:true,stale:false,distanceFilter:0},
+      (loc,err)=>{if(err){if(err.code==='NOT_AUTHORIZED')gpsFail('Izin lokasi ditolak. Buka Pengaturan HP → Aplikasi → cupuberlari → Izin → Lokasi, lalu pilih "Izinkan".');else gpsFail('GPS tidak tersedia: '+(err.message||err.code));return}
         R.here=loc;onPos({lat:loc.latitude,lon:loc.longitude,alt:loc.altitude,acc:loc.accuracy,ts:loc.time||Date.now()});renderRec()})
       .then(id=>{if(R.watch)R.watch.bg=id;else BG.removeWatcher({id})}).catch(e=>gpsFail('GPS tidak bisa dimulai: '+(e.message||e)));return}
   if(!('geolocation' in navigator)){gpsFail('Browser ini tidak mendukung GPS.');return}
@@ -405,7 +405,7 @@ async function drawStory(item){await fontsReady();const W=1080,H=1920,c=document
   // pil + logo
   const run=item.run,pill=item.kind==='run'?planLabel(run.date):item.kind==='pr'?(item.prev?'Rekor pribadi baru':'Rekor pertama'):'Pencapaian baru';
   x.font=`400 30px ${SF}`;const pw=x.measureText(pill).width+48;rr(x,PX,CY+56,pw,54,27);x.fillStyle=soft;x.fill();txt(x,pill,PX+24,CY+93,`400 30px ${SF}`,mu);
-  x.beginPath();x.arc(CX+CW-80,CY+84,26,0,7);x.lineWidth=5;x.strokeStyle=bg==='lime'?'#15160F':'#CCF33A';x.stroke();txt(x,'L',CX+CW-80,CY+96,`700 32px ${SF}`,fg,'center');
+  x.beginPath();x.arc(CX+CW-80,CY+84,26,0,7);x.lineWidth=5;x.strokeStyle=bg==='lime'?'#15160F':'#CCF33A';x.stroke();txt(x,'C',CX+CW-80,CY+96,`700 32px ${SF}`,fg,'center');
   let y=CY+200;
   if(item.kind==='run'){
     txt(x,ST.title||runName(run),PX,y,`700 64px ${SF}`,fg);y+=62;
@@ -436,16 +436,16 @@ async function drawStory(item){await fontsReady();const W=1080,H=1920,c=document
     const W10=weekBuckets(10).map(w=>w.km);txt(x,'Km per minggu',PX,y,`400 32px ${SF}`,mu);y+=26;
     const mx=Math.max(1,...W10),gap=14,bw2=(IW-gap*9)/10;W10.forEach((v,i)=>{const bh=Math.max(14,150*v/mx);rr(x,PX+i*(bw2+gap),y+150-bh,bw2,bh,12);x.fillStyle=i===9?(bg==='lime'?'#15160F':'#CCF33A'):(bg==='lime'?'rgba(21,22,15,.35)':'rgba(255,255,255,.75)');x.fill()});
   }
-  if(bg!=='clear')txt(x,'LANGKAH',W/2,CY+CH+80,`700 30px ${SF}`,mu,'center');
+  if(bg!=='clear')txt(x,'CUPUBERLARI',W/2,CY+CH+80,`700 30px ${SF}`,mu,'center');
   return c}
 let DL=null;(async()=>{try{if(window.claude&&window.claude.use)DL=await window.claude.use('downloads')}catch(e){DL=null}})();
 function blobB64(blob){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=no;r.readAsDataURL(blob)})}
 async function saveBlob(blob,name){
   // Aplikasi Android: simpan ke cache lalu buka lembar Bagikan (Instagram, Galeri, Drive, WhatsApp…)
   const FS=NP('Filesystem'),SH=NP('Share');
-  if(FS&&SH){try{const w=await FS.writeFile({path:name,data:await blobB64(blob),directory:'CACHE'});await SH.share({title:'Langkah',files:[w.uri],dialogTitle:'Bagikan atau simpan'});return}catch(e){if(/cancel/i.test(String(e&&e.message)))return;toast('Gagal membagikan: '+((e&&e.message)||e))}return}
+  if(FS&&SH){try{const w=await FS.writeFile({path:name,data:await blobB64(blob),directory:'CACHE'});await SH.share({title:'cupuberlari',files:[w.uri],dialogTitle:'Bagikan atau simpan'});return}catch(e){if(/cancel/i.test(String(e&&e.message)))return;toast('Gagal membagikan: '+((e&&e.message)||e))}return}
   if(DL){try{await DL.save({filename:name,data:blob});toast('Gambar tersimpan. Buka Instagram, pilih Story, lalu ambil dari galeri.');return}catch(e){if(e&&e.code==='declined')return}}
-  try{const file=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Langkah'});return}}catch(e){if(e&&e.name==='AbortError')return}
+  try{const file=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'cupuberlari'});return}}catch(e){if(e&&e.name==='AbortError')return}
   try{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);toast('Kalau tidak terunduh, tekan lama gambar lalu pilih Simpan.')}catch(e){toast('Tekan lama gambar lalu pilih Simpan gambar.')}}
 function openModal(html){$('#sheet').innerHTML=html;$('#modal').hidden=false;document.body.style.overflow='hidden'}
 function closeModal(){$('#modal').hidden=true;document.body.style.overflow='';$('#sheet').innerHTML=''}
@@ -471,7 +471,7 @@ async function openStory(item,intro){STORY_ITEM=item;storyFields();const isRun=i
   await renderStory()}
 let stT=null;async function renderStory(){STORY_CANVAS=await drawStory(STORY_ITEM);const img=$('#st-img');if(img){img.src=STORY_CANVAS.toDataURL('image/png');img.classList.toggle('checker',ST.bg==='clear')}}
 $('#sheet').addEventListener('click',async e=>{const b=e.target.closest('[data-bg]');if(b){ST.bg=b.dataset.bg;PREF.storyBg=ST.bg;LS.set('lk-pref',PREF);$$('#st-bg button').forEach(x=>x.setAttribute('aria-pressed',x===b));$('#st-photo').hidden=ST.bg!=='photo';$('#st-clear').hidden=ST.bg!=='clear';if(ST.bg==='photo'&&!ST.img)$('#st-file').click();await renderStory();return}
-  if(e.target.id==='st-save'&&STORY_CANVAS){STORY_CANVAS.toBlob(bl=>bl&&saveBlob(bl,`langkah-story-${Date.now()}.png`),'image/png');return}
+  if(e.target.id==='st-save'&&STORY_CANVAS){STORY_CANVAS.toBlob(bl=>bl&&saveBlob(bl,`cupuberlari-story-${Date.now()}.png`),'image/png');return}
   const li=e.target.closest('[data-it]');if(li&&CELEB){STORY_ITEM=CELEB[+li.dataset.it];storyFields();$('#st-title').value=ST.title;$('#st-place').value=ST.place;$$('#st-list [data-it]').forEach(x=>x.setAttribute('aria-pressed',x===li));await renderStory()}});
 $('#sheet').addEventListener('change',async e=>{const id=e.target.id;
   if(id==='st-gray'){ST.gray=e.target.checked;PREF.storyGray=ST.gray;LS.set('lk-pref',PREF);await renderStory()}
@@ -783,13 +783,13 @@ function intensityCard(){const it=intensity();if(it.pct==null)return `<div class
 document.addEventListener('click',e=>{const id=e.target.id;
   if(id==='rw-add'){$('#rw-form').hidden=false;$('#mf-km').focus()}
   else if(id==='mf-cancel'){$('#rw-form').hidden=true}
-  else if(id==='bk-out'){const data=JSON.stringify({app:'langkah',v:2,exported:new Date().toISOString(),profile:P,runs:RUNS,done:DONE,earned:EARNED,pref:PREF});saveBlob(new Blob([data],{type:'application/json'}),`langkah-cadangan-${iso(new Date())}.json`)}
+  else if(id==='bk-out'){const data=JSON.stringify({app:'cupuberlari',v:2,exported:new Date().toISOString(),profile:P,runs:RUNS,done:DONE,earned:EARNED,pref:PREF});saveBlob(new Blob([data],{type:'application/json'}),`cupuberlari-cadangan-${iso(new Date())}.json`)}
 });
 document.addEventListener('submit',e=>{if(e.target.id!=='rw-form')return;e.preventDefault();const km=+$('#mf-km').value,sec=parseTime($('#mf-time').value);if(!(km>0)||!sec){toast('Isi jarak dan durasi (contoh 32:10).');return}
   const hr=$('#mf-hour').value;saveRun({src:'manual',date:hr?new Date(`${$('#mf-date').value}T${hr}:00`).toISOString():$('#mf-date').value,km,sec,elev:+$('#mf-elev').value||0,rpe:+$('#mf-rpe').value,note:$('#mf-note').value.trim(),splits:[],track:null})});
 document.addEventListener('change',async e=>{if(e.target.id!=='bk-in')return;const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{const d=JSON.parse(await f.text());if(d.app!=='langkah'||!Array.isArray(d.runs))throw 0;P=d.profile||P;RUNS=d.runs;DONE=d.done||{};EARNED=d.earned||{};PREF=Object.assign(PREF,d.pref||{});
-    saveP();saveRuns();saveDone();saveEarned();LS.set('lk-pref',PREF);PLAN_SIG='';toast(`Cadangan dipulihkan: ${RUNS.length} lari.`);route()}catch(err){toast('File ini bukan cadangan Langkah.')}});
+  try{const d=JSON.parse(await f.text());if((d.app!=='langkah'&&d.app!=='cupuberlari')||!Array.isArray(d.runs))throw 0;P=d.profile||P;RUNS=d.runs;DONE=d.done||{};EARNED=d.earned||{};PREF=Object.assign(PREF,d.pref||{});
+    saveP();saveRuns();saveDone();saveEarned();LS.set('lk-pref',PREF);PLAN_SIG='';toast(`Cadangan dipulihkan: ${RUNS.length} lari.`);route()}catch(err){toast('File ini bukan cadangan cupuberlari.')}});
 
 /* ================= detail lari ================= */
 function rLari(id){const v=$('#v-lari'),r=RUNS.find(x=>x.id===id);if(!r){v.innerHTML=`<div class="card empty"><p>Lari tidak ditemukan.</p><a class="btn" href="#riwayat">Ke riwayat</a></div>`;return}
@@ -892,7 +892,7 @@ function rProfil(){const v=$('#v-profil');
   <div class="card stack"><h3>Level</h3><p class="small muted">Ganti level kapan saja. Program, fitur, dan target konsistensi menyesuaikan. Catatan lari tidak berubah.</p>
     <div class="lvls" id="pf-lvl">${Object.entries(LEVELS).map(([k,L])=>lvlCard(k,L,k===P.level)).join('')}</div></div>
   ${acctCard()}
-  ${NATIVE?'':`<div class="card stack"><h3>Aplikasi Android</h3><p class="small muted">GPS tetap merekam walau layar mati. Masuk dengan akun yang sama supaya datanya tersambung dengan website ini.</p><div class="row"><a class="btn" href="${APK_URL}" target="_blank" rel="noopener">Unduh APK terbaru</a><button class="btn ghost sm" type="button" id="lp-again">Lihat halaman pilihan akses</button></div></div>`}
+  ${NATIVE?'':`<div class="card stack"><h3>Aplikasi Android</h3><p class="small muted">GPS tetap merekam walau layar mati. Masuk dengan akun yang sama supaya datanya tersambung dengan website ini.</p><div class="row"><a class="btn" href="${APK_URL}" download>Unduh APK terbaru</a><button class="btn ghost sm" type="button" id="lp-again">Lihat halaman pilihan akses</button></div></div>`}
   <div class="card stack"><h3>Data diri</h3><div class="row">
     <label class="f" for="pf-name" style="flex:1 1 180px">Nama panggilan<input id="pf-name" value="${esc(P.name)}" maxlength="24"></label>
     <label class="f" for="pf-age">Umur<input id="pf-age" type="number" min="12" max="90" class="w-s" value="${P.age}"></label>
@@ -939,26 +939,32 @@ document.addEventListener('change',e=>{const t=e.target,id=t.id;
   else if(id==='pf-age'){P.age=+t.value||25;saveP()}else if(id==='pf-rest'){P.restHR=+t.value||70;saveP()}else if(id==='pf-max'){P.maxHR=+t.value||null;saveP()}else if(id==='pf-w'){P.weight=+t.value||null;saveP()}});
 
 /* ================= Landing: web atau aplikasi ================= */
-const APK_URL='https://github.com/jadilebihfit/running-tracker/releases/latest';
+const APK_URL='https://github.com/jadilebihfit/running-tracker/releases/latest/download/cupuberlari.apk';
+const APK_PAGE='https://github.com/jadilebihfit/running-tracker/releases/latest';
 function showLP(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);$('#onb').hidden=true;const o=$('#lp');o.hidden=false;
-  o.innerHTML=`<div class="onb lp"><span class="wm" style="font-size:1.9rem">Langkah<i></i></span>
-   <h1>Mau lari pakai <em>apa</em> hari ini?</h1>
-   <p class="muted" style="font-size:1.05rem;max-width:56ch">Pilih cara pakai Langkah. Dua-duanya punya fitur yang sama dan bisa dipakai bergantian.</p>
-   <div class="lvls">
-     <button class="lvl" type="button" id="lp-web"><span class="ln"><i>W</i>Website</span><span class="tg">Langsung pakai di browser, tanpa install.</span>
-       <ul><li>Bisa dibuka di HP maupun laptop</li><li>Bisa ditambahkan ke layar utama</li><li>GPS berhenti kalau layar HP mati</li></ul><span class="btn pri" style="justify-self:start">Lanjut di website</span></button>
-     <a class="lvl" href="${APK_URL}" target="_blank" rel="noopener" id="lp-app" style="text-decoration:none"><span class="ln"><i>A</i>Aplikasi Android</span><span class="tg">Install APK untuk rekaman paling akurat.</span>
-       <ul><li>GPS tetap jalan walau layar mati</li><li>Notifikasi saat merekam</li><li>Bagikan story langsung ke Instagram</li></ul><span class="btn" style="justify-self:start">Unduh APK</span></a>
+  const ic={web:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    app:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>',
+    dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    go:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    sync:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></svg>'};
+  o.innerHTML=`<div class="lpw">
+   <header class="lp-head"><span class="lp-logo">C</span><span class="wm">cupuberlari<i></i></span></header>
+   <section class="lp-hero"><span class="eyebrow">Running tracker</span><h1>Lari bareng <em>cupuberlari.</em></h1>
+     <p>Program latihan, rekam GPS, rekor otomatis, dan story milestone. Pilih mau pakai lewat mana.</p></section>
+   <div class="lp-opts">
+     <button class="lp-opt" type="button" id="lp-web"><span class="lp-ic">${ic.web}</span><span class="lp-t"><b>Pakai di website</b><span>Langsung jalan di browser HP atau laptop. Tanpa install.</span></span><span class="lp-go">${ic.go}</span></button>
+     <a class="lp-opt main" href="${APK_URL}" id="lp-app" download><span class="lp-ic">${ic.app}</span><span class="lp-t"><b>Unduh aplikasi Android</b><span>GPS tetap merekam walau layar mati. File APK ±5 MB.</span></span><span class="lp-go">${ic.dl}</span></a>
    </div>
-   <div class="note blue"><b>Data kamu tersambung antara aplikasi dan website.</b> Masuk dengan akun yang sama di keduanya (Profil → Akun &amp; sinkron), maka lari, program, dan pencapaian otomatis sama. Tanpa masuk akun, data hanya tersimpan di perangkat yang sedang dipakai dan tidak ikut pindah.</div>
-   <p class="tiny muted">Aplikasi Android belum ada di Play Store. Setelah unduh, buka file APK dan izinkan "Instal dari sumber tidak dikenal" kalau diminta. iPhone: pakai website, lalu Share → Add to Home Screen.</p></div>`}
-document.addEventListener('click',e=>{if(e.target.id==='lp-again'){LS.del('lk-lp');route();return}if(e.target.closest('#lp-web')){LS.set('lk-lp',true);route()}else if(e.target.closest('#lp-app')){LS.set('lk-lp',true)}});
+   <div class="lp-sync"><span class="lp-ic">${ic.sync}</span><div><b>Data kamu tersambung antara aplikasi dan website</b><p>Masuk dengan akun yang sama di keduanya (Profil → Akun &amp; sinkron), maka lari, program, dan pencapaian otomatis sama. Tanpa akun, data hanya tersimpan di perangkat yang sedang dipakai.</p></div></div>
+   <p class="lp-foot">Aplikasi belum ada di Play Store. Setelah unduh, buka file APK dan izinkan "Instal dari sumber tidak dikenal" kalau diminta. Pengguna iPhone: pakai website, lalu Share → Add to Home Screen. <a href="${APK_PAGE}" target="_blank" rel="noopener">Semua versi APK</a></p>
+  </div>`}
+document.addEventListener('click',e=>{if(e.target.id==='lp-again'){LS.del('lk-lp');route();return}if(e.target.closest('#lp-web')){LS.set('lk-lp',true);route()}else if(e.target.closest('#lp-app')){LS.set('lk-lp',true);toast('Mengunduh cupuberlari.apk…')}});
 
 /* ================= Onboarding ================= */
 let OB={step:0,d:null};
 function showOnb(){VIEWS.forEach(x=>$('#v-'+x).hidden=true);const o=$('#onb');o.hidden=false;if(!OB.d)OB.d=defaultProfile('pemula');rOnb()}
 function rOnb(){const o=$('#onb'),d=OB.d,L=LEVELS[d.level];const steps=`<div class="steps" aria-hidden="true">${[0,1,2].map(i=>`<i class="${i<=OB.step?'on':''}"></i>`).join('')}</div>`;
-  if(OB.step===0)o.innerHTML=`<div class="onb">${steps}<span class="wm" style="font-size:2rem">Langkah<i></i></span><h1>Lari yang <em>pas</em> buat levelmu.</h1>
+  if(OB.step===0)o.innerHTML=`<div class="onb">${steps}<span class="wm" style="font-size:2rem">cupuberlari<i></i></span><h1>Lari yang <em>pas</em> buat levelmu.</h1>
     <p class="muted" style="font-size:1.08rem;max-width:56ch">Program latihan, rekam GPS, target pace, rekor otomatis, dan milestone yang bisa kamu pamerin di Instagram Story. Semua data tersimpan di HP-mu sendiri, tanpa akun dan tanpa server.</p>
     <label class="f" for="ob-name" style="max-width:360px">Nama panggilan<input id="ob-name" value="${esc(d.name)}" placeholder="mis. Raka" maxlength="24" autocomplete="nickname"></label>
     <div class="row"><button class="btn pri big" type="button" id="ob-next">Lanjut</button><button class="btn" type="button" id="ob-login">Sudah punya akun? Masuk</button>${(RUNS.length||LS.get('la-log',null))?'':`<label class="btn ghost" for="bk-in">Pulihkan cadangan</label><input type="file" id="bk-in" accept=".json,application/json" hidden>`}</div></div>`;

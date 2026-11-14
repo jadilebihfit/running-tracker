@@ -39,18 +39,20 @@ jobs:
           ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Langkah-${{ github.run_number }}.apk
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk cupuberlari-${{ github.run_number }}.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk cupuberlari.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Langkah-apk
-          path: Langkah-${{ github.run_number }}.apk
+          name: cupuberlari-apk
+          path: cupuberlari-${{ github.run_number }}.apk
 
       - name: Publish ke halaman Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "apk-${{ github.run_number }}" "Langkah-${{ github.run_number }}.apk" \
-            --title "Langkah APK #${{ github.run_number }}" \
+          gh release create "apk-${{ github.run_number }}" cupuberlari.apk "cupuberlari-${{ github.run_number }}.apk" \
+            --title "cupuberlari APK #${{ github.run_number }}" \
             --notes "APK debug otomatis dari commit ${{ github.sha }}. Unduh dari HP Android, lalu buka file-nya untuk memasang." \
             --latest

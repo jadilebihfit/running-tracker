@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Langkah</string>
-    <string name="title_activity_main">Langkah</string>
+    <string name="app_name">cupuberlari</string>
+    <string name="title_activity_main">cupuberlari</string>
     <string name="package_name">xyz.jadilebihfit.langkah</string>
     <string name="custom_url_scheme">xyz.jadilebihfit.langkah</string>
     <string name="capacitor_background_geolocation_notification_channel_name">Rekam lari</string>
